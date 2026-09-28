@@ -1,0 +1,284 @@
+// GraphQL schema: Phase 2 base types + Phase 3 authentication operations +
+// Phase 4 PG/room management operations + Phase 5 tenant management operations.
+// Password is intentionally never exposed (FR-34).
+export const typeDefs = `
+  type Query {
+    health: String!
+
+    "Current authenticated user (null when not logged in)."
+    me: User
+
+    "All users. Admin-only."
+    allUsers: [User!]!
+
+    "All PGs with their rooms (PGs newest first, rooms by room number). Admin-only."
+    getAllPgsRooms: [Pg!]!
+
+    "All PGs, newest first. Admin-only."
+    getAllPgs: [Pg!]!
+
+    "The current tenant's assigned PG and room. Tenant-only; null while the user has no tenant record."
+    getTenantPgRoom: TenantPgRoom
+
+    "Searchable, paginated room list (search matches room number and room type). Admin-only."
+    getAllRooms(search: String, pgId: ID, limit: Int = 20, offset: Int = 0): RoomPage!
+
+    "All tenants, newest first (search matches tenant name, phone, and the linked user's email). Admin-only."
+    getAllTenants(search: String, pgId: ID, limit: Int = 20, offset: Int = 0): TenantPage!
+  }
+
+  type Mutation {
+    "Register a new user. Role is always Tenant and never accepted from input."
+    registerUser(input: RegisterInput!): User!
+
+    "Login with email + password. Sets HTTP-only auth cookies."
+    loginUser(input: LoginInput!): User!
+
+    "Clear auth cookies."
+    logoutUser: Boolean!
+
+    "Rotate access + refresh cookies using the refresh-token cookie."
+    refreshToken: User!
+
+    "Update the current user's profile."
+    updateProfile(input: UpdateProfileInput!): User!
+
+    "Create a PG. Admin-only."
+    createPg(input: CreatePgInput!): Pg!
+
+    "Update a PG. Omit or pass null to leave a field unchanged; send an empty string to clear an optional field. Admin-only."
+    updatePg(id: ID!, input: UpdatePgInput!): Pg!
+
+    "Create a room under a PG. Occupancy always starts at 0. Admin-only."
+    createRoom(input: CreateRoomInput!): Room!
+
+    "Update a room. Rooms cannot be moved between PGs; capacity cannot go below the current occupancy. Admin-only."
+    updateRoom(id: ID!, input: UpdateRoomInput!): Room!
+
+    "Create a tenant record linked to an existing Tenant-role user under a PG, with an optional room assignment. Room occupancy is advanced atomically. Admin-only."
+    createTenant(input: CreateTenantInput!): Tenant!
+
+    "Update a tenant. Omit or pass null to leave a field unchanged; send an empty string to clear an optional field. Room assignment changes update occupancy atomically. Admin-only."
+    updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+  }
+
+  input RegisterInput {
+    name: String!
+    email: String!
+    password: String!
+  }
+
+  input LoginInput {
+    email: String!
+    password: String!
+  }
+
+  input UpdateProfileInput {
+    name: String
+    phone: String
+  }
+
+  input CreatePgInput {
+    name: String!
+    address: String!
+    city: String
+    contactNumber: String
+    description: String
+  }
+
+  input UpdatePgInput {
+    name: String
+    address: String
+    city: String
+    contactNumber: String
+    description: String
+  }
+
+  input CreateRoomInput {
+    "PG the room belongs to."
+    pgId: ID!
+    roomNumber: String!
+    roomType: String
+    capacity: Int!
+    rent: Int!
+    floor: Int
+  }
+
+  input UpdateRoomInput {
+    roomNumber: String
+    roomType: String
+    capacity: Int
+    rent: Int
+    floor: Int
+  }
+
+  input CreateTenantInput {
+    "Existing Tenant-role user to link. One tenant record per user."
+    userId: ID!
+    pgId: ID!
+    "Optional room in the same PG; a free bed is verified under a row lock."
+    roomId: ID
+    name: String!
+    phone: String
+    emergencyContact: String
+    "Calendar date in YYYY-MM-DD format."
+    joinDate: String
+  }
+
+  input UpdateTenantInput {
+    "Re-link the tenant record to another Tenant-role user; omit/null/'' keeps the current one."
+    userId: ID
+    name: String
+    phone: String
+    emergencyContact: String
+    joinDate: String
+    "Omit/null/'' keeps the current PG (a PG cannot be cleared)."
+    pgId: ID
+    "Omit to keep the room; null/'' unassigns it; an id assigns/reassigns it (the room must belong to the tenant's PG after this update)."
+    roomId: ID
+  }
+
+  "User role used for Admin/Tenant authorization boundaries."
+  enum UserRole {
+    Admin
+    Tenant
+  }
+
+  "Rent payment status (values match the RentPayment entity exactly, MRD §16)."
+  enum PaymentStatus {
+    pending
+    partial
+    paid
+    overdue
+  }
+
+  "Complaint status (values match the Complaint entity exactly)."
+  enum ComplaintStatus {
+    open
+    in_progress
+    resolved
+  }
+
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+    role: UserRole!
+    phone: String
+    createdAt: String!
+    updatedAt: String!
+    tenant: Tenant
+  }
+
+  type Pg {
+    id: ID!
+    name: String!
+    address: String!
+    city: String
+    contactNumber: String
+    description: String
+    createdAt: String!
+    updatedAt: String!
+    rooms: [Room!]!
+    tenants: [Tenant!]!
+    complaints: [Complaint!]!
+    announcements: [Announcement!]!
+  }
+
+  type Room {
+    id: ID!
+    roomNumber: String!
+    roomType: String
+    capacity: Int!
+    occupiedCount: Int!
+    rent: Int!
+    floor: Int
+    pg: Pg!
+    tenants: [Tenant!]!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Tenant {
+    id: ID!
+    name: String!
+    phone: String
+    emergencyContact: String
+    joinDate: String
+    user: User!
+    pg: Pg!
+    room: Room
+    documents: [TenantDocument!]!
+    payments: [RentPayment!]!
+    complaints: [Complaint!]!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type TenantDocument {
+    id: ID!
+    docName: String!
+    docUrl: String!
+    docNumber: String
+    tenant: Tenant!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type RentPayment {
+    id: ID!
+    amount: Int!
+    paidAmount: Int!
+    dueDate: String!
+    paidDate: String
+    status: PaymentStatus!
+    notes: String
+    tenant: Tenant!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Complaint {
+    id: ID!
+    title: String!
+    description: String!
+    status: ComplaintStatus!
+    resolvedAt: String
+    tenant: Tenant!
+    pg: Pg!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Announcement {
+    id: ID!
+    title: String!
+    content: String!
+    pg: Pg!
+    createdBy: User!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  "A tenant's PG/room assignment (room is null until one is assigned)."
+  type TenantPgRoom {
+    pg: Pg!
+    room: Room
+  }
+
+  "One page of a paginated room list. The same limit/offset shape is reused by later paginated collections (MRD §16)."
+  type RoomPage {
+    items: [Room!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+
+  "One page of a paginated tenant list (same shape as RoomPage, MRD §16)."
+  type TenantPage {
+    items: [Tenant!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+`;
