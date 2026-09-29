@@ -1,7 +1,7 @@
 // GraphQL schema: Phase 2 base types + Phase 3 authentication operations +
 // Phase 4 PG/room management operations + Phase 5 tenant management operations +
 // Phase 6 rent and payment management operations + Phase 7 complaint management operations +
-// Phase 8 announcement management operations.
+// Phase 8 announcement management operations + Phase 9 tenant document operations.
 // Password is intentionally never exposed (FR-34).
 export const typeDefs = `
   type Query {
@@ -51,6 +51,9 @@ export const typeDefs = `
 
     "Announcements of the current tenant's own PG, newest first. Tenant-only."
     getTenantPgAnnouncements(limit: Int = 20, offset: Int = 0): AnnouncementPage!
+
+    "The current tenant's own documents, newest first. Tenant-only."
+    getTenantDocuments(limit: Int = 20, offset: Int = 0): TenantDocumentPage!
   }
 
   type Mutation {
@@ -104,6 +107,15 @@ export const typeDefs = `
 
     "Update an announcement. Omit or pass null to leave a field unchanged. An announcement can never move between PGs. Admin-only."
     updateAnnouncement(id: ID!, input: UpdateAnnouncementInput!): Announcement!
+
+    "Record uploaded document metadata/URLs for the current tenant. The client uploads each file to storage first, then records the resulting URL here. All-or-nothing batch. Tenant-only."
+    uploadTenantDocs(input: UploadTenantDocsInput!): [TenantDocument!]!
+
+    "Update one of the current tenant's documents. Omit or pass null to leave a field unchanged; send an empty string to clear the optional document number. Tenant-only."
+    updateTenantDocs(id: ID!, input: UpdateTenantDocsInput!): TenantDocument!
+
+    "Delete the current tenant's documents. Every id must exist and belong to the caller; all-or-nothing batch. Storage files are removed by the client. Tenant-only."
+    deleteTenantDocuments(ids: [ID!]!): Boolean!
   }
 
   input RegisterInput {
@@ -237,6 +249,30 @@ export const typeDefs = `
     title: String
     "Announcement body (1-5000 characters)."
     content: String
+  }
+
+  "One document in an uploadTenantDocs batch. The file itself is uploaded to storage by the client; only the URL and metadata are recorded here."
+  input UploadTenantDocInput {
+    "Document display name (1-120 characters)."
+    docName: String!
+    "Public storage URL of the uploaded file (1-500 characters, absolute http(s) URL)."
+    docUrl: String!
+    "Optional document reference number (max 60 characters)."
+    docNumber: String
+  }
+
+  input UploadTenantDocsInput {
+    "Documents to record (1-20 per batch)."
+    docs: [UploadTenantDocInput!]!
+  }
+
+  input UpdateTenantDocsInput {
+    "Document display name (1-120 characters)."
+    docName: String
+    "Public storage URL of the uploaded file (1-500 characters, absolute http(s) URL)."
+    docUrl: String
+    "Optional document reference number (max 60 characters); an empty string clears it."
+    docNumber: String
   }
 
   "User role used for Admin/Tenant authorization boundaries."
@@ -402,6 +438,14 @@ export const typeDefs = `
   "One page of a paginated announcement list (same shape as RoomPage, MRD §16)."
   type AnnouncementPage {
     items: [Announcement!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+
+  "One page of a paginated tenant document list (same shape as RoomPage, MRD §16)."
+  type TenantDocumentPage {
+    items: [TenantDocument!]!
     total: Int!
     limit: Int!
     offset: Int!

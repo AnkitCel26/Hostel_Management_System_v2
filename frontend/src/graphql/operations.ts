@@ -586,3 +586,59 @@ export const UPDATE_ANNOUNCEMENT_MUTATION = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------------
+// Phase 9 — Tenant Documents
+// A document belongs to exactly one tenant record, which the server derives
+// from the caller, so no tenant relation is ever sent or filtered on. The
+// fragment carries the stored URL and the optional reference number only.
+// ---------------------------------------------------------------------------
+
+const TENANT_DOCUMENT_FIELDS = gql`
+  fragment TenantDocumentFields on TenantDocument {
+    id
+    docName
+    docUrl
+    docNumber
+    createdAt
+    updatedAt
+  }
+`;
+
+export const GET_TENANT_DOCUMENTS_QUERY = gql`
+  ${TENANT_DOCUMENT_FIELDS}
+  query GetTenantDocuments($limit: Int, $offset: Int) {
+    getTenantDocuments(limit: $limit, offset: $offset) {
+      items {
+        ...TenantDocumentFields
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const UPLOAD_TENANT_DOCS_MUTATION = gql`
+  ${TENANT_DOCUMENT_FIELDS}
+  mutation UploadTenantDocs($input: UploadTenantDocsInput!) {
+    uploadTenantDocs(input: $input) {
+      ...TenantDocumentFields
+    }
+  }
+`;
+
+export const UPDATE_TENANT_DOCS_MUTATION = gql`
+  ${TENANT_DOCUMENT_FIELDS}
+  mutation UpdateTenantDocs($id: ID!, $input: UpdateTenantDocsInput!) {
+    updateTenantDocs(id: $id, input: $input) {
+      ...TenantDocumentFields
+    }
+  }
+`;
+
+export const DELETE_TENANT_DOCUMENTS_MUTATION = gql`
+  mutation DeleteTenantDocuments($ids: [ID!]!) {
+    deleteTenantDocuments(ids: $ids)
+  }
+`;

@@ -17,6 +17,7 @@ import {
 import * as authService from './services/auth.service';
 import * as announcementService from './services/announcement.service';
 import * as complaintService from './services/complaint.service';
+import * as documentService from './services/document.service';
 import * as paymentService from './services/payment.service';
 import * as pgService from './services/pg.service';
 import * as relationsService from './services/relations.service';
@@ -158,6 +159,17 @@ export const resolvers = {
       // accepted from input (FR-27 role boundary).
       const user = requireTenant(ctx);
       return announcementService.getTenantPgAnnouncements(user.id, args);
+    },
+
+    getTenantDocuments: (
+      _parent: unknown,
+      args: documentService.DocumentListArgs,
+      ctx: GraphQLContext
+    ) => {
+      // The service scopes strictly to the caller's own tenant record — no
+      // tenantId is accepted from input (FR-28 role boundary).
+      const user = requireTenant(ctx);
+      return documentService.getTenantDocuments(user.id, args);
     }
   },
 
@@ -299,6 +311,40 @@ export const resolvers = {
     ) => {
       requireAdmin(ctx);
       return announcementService.updateAnnouncement(args.id, args.input);
+    },
+
+    uploadTenantDocs: (
+      _parent: unknown,
+      args: { input: documentService.UploadTenantDocsInput },
+      ctx: GraphQLContext
+    ) => {
+      // The service derives the tenant from the caller — a document can
+      // never be recorded against another tenant's record (FR-29).
+      const user = requireTenant(ctx);
+      return documentService.uploadTenantDocs(user.id, args.input);
+    },
+
+    updateTenantDocs: (
+      _parent: unknown,
+      args: { id: string; input: documentService.UpdateTenantDocsInput },
+      ctx: GraphQLContext
+    ) => {
+      // The service verifies the document belongs to the caller's own
+      // tenant record — one tenant can never change another tenant's
+      // document (FR-29 role boundary).
+      const user = requireTenant(ctx);
+      return documentService.updateTenantDocs(user.id, args.id, args.input);
+    },
+
+    deleteTenantDocuments: (
+      _parent: unknown,
+      args: { ids: string[] },
+      ctx: GraphQLContext
+    ) => {
+      // The service verifies every document belongs to the caller's own
+      // tenant record, and the batch is all-or-nothing (FR-30).
+      const user = requireTenant(ctx);
+      return documentService.deleteTenantDocuments(user.id, args.ids);
     }
   },
 

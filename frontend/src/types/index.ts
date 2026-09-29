@@ -293,3 +293,45 @@ export interface UpdateAnnouncementInput {
   title?: string | null;
   content?: string | null;
 }
+
+/** Mirrors the GraphQL TenantDocument type (Phase 9). The file itself lives in
+ * storage; the record holds only the display metadata and the stored URL. */
+export interface TenantDocument {
+  id: string;
+  docName: string;
+  /** Public storage URL of the file. */
+  docUrl: string;
+  /** Optional reference number (e.g. an ID document number). */
+  docNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present only when the operation selects the tenant relation. */
+  tenant?: Tenant;
+}
+
+/** Mirrors the GraphQL TenantDocumentPage type (paginated document list). */
+export interface TenantDocumentPage {
+  items: TenantDocument[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** One document recorded by uploadTenantDocs. The storage URL comes from the
+ * client's own upload; the tenant is always derived by the server. */
+export interface UploadTenantDocInput {
+  docName: string;
+  docUrl: string;
+  docNumber?: string | null;
+}
+
+export interface UploadTenantDocsInput {
+  docs: UploadTenantDocInput[];
+}
+
+/** Partial update: omit/null leaves a field unchanged; '' clears docNumber. */
+export interface UpdateTenantDocsInput {
+  docName?: string | null;
+  docUrl?: string | null;
+  docNumber?: string | null;
+}
