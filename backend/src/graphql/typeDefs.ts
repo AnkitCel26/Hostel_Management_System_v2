@@ -1,6 +1,7 @@
 // GraphQL schema: Phase 2 base types + Phase 3 authentication operations +
 // Phase 4 PG/room management operations + Phase 5 tenant management operations +
-// Phase 6 rent and payment management operations + Phase 7 complaint management operations.
+// Phase 6 rent and payment management operations + Phase 7 complaint management operations +
+// Phase 8 announcement management operations.
 // Password is intentionally never exposed (FR-34).
 export const typeDefs = `
   type Query {
@@ -44,6 +45,12 @@ export const typeDefs = `
 
     "The current tenant's own complaints, newest first. Tenant-only."
     getTenantComplaints(limit: Int = 20, offset: Int = 0): ComplaintPage!
+
+    "Searchable, paginated announcement list (search matches the PG name, the announcement title, and the content). Admin-only."
+    getAllAnnouncements(search: String, pgId: ID, limit: Int = 20, offset: Int = 0): AnnouncementPage!
+
+    "Announcements of the current tenant's own PG, newest first. Tenant-only."
+    getTenantPgAnnouncements(limit: Int = 20, offset: Int = 0): AnnouncementPage!
   }
 
   type Mutation {
@@ -91,6 +98,12 @@ export const typeDefs = `
 
     "Update a complaint. Omit or pass null to leave a field unchanged. resolvedAt is system-managed alongside the status. Admin-only."
     updateComplaint(id: ID!, input: UpdateComplaintInput!): Complaint!
+
+    "Create an announcement for a PG. The creator is always the current admin - never accepted from input. Admin-only."
+    createAnnouncement(input: CreateAnnouncementInput!): Announcement!
+
+    "Update an announcement. Omit or pass null to leave a field unchanged. An announcement can never move between PGs. Admin-only."
+    updateAnnouncement(id: ID!, input: UpdateAnnouncementInput!): Announcement!
   }
 
   input RegisterInput {
@@ -208,6 +221,22 @@ export const typeDefs = `
     "What happened and what is expected (1-5000 characters)."
     description: String
     status: ComplaintStatus
+  }
+
+  input CreateAnnouncementInput {
+    "PG the announcement belongs to."
+    pgId: ID!
+    "Short announcement summary (1-160 characters)."
+    title: String!
+    "Announcement body (1-5000 characters)."
+    content: String!
+  }
+
+  input UpdateAnnouncementInput {
+    "Short announcement summary (1-160 characters)."
+    title: String
+    "Announcement body (1-5000 characters)."
+    content: String
   }
 
   "User role used for Admin/Tenant authorization boundaries."
@@ -365,6 +394,14 @@ export const typeDefs = `
   "One page of a paginated complaint list (same shape as RoomPage, MRD §16)."
   type ComplaintPage {
     items: [Complaint!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+
+  "One page of a paginated announcement list (same shape as RoomPage, MRD §16)."
+  type AnnouncementPage {
+    items: [Announcement!]!
     total: Int!
     limit: Int!
     offset: Int!

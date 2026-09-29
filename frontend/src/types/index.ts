@@ -256,3 +256,40 @@ export interface UpdateComplaintInput {
   description?: string | null;
   status?: ComplaintStatus | null;
 }
+
+/** Mirrors the GraphQL Announcement type (Phase 8). */
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Present only when the operation selects the pg relation. */
+  pg?: Pg;
+  /** Creator (User 1 ─ * Announcement); present when the operation selects it. */
+  createdBy?: AuthUser;
+}
+
+/** Mirrors the GraphQL AnnouncementPage type (paginated announcement list). */
+export interface AnnouncementPage {
+  items: Announcement[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * An admin creates an announcement for a PG. The creator is never taken from
+ * input — the server derives it from the calling admin.
+ */
+export interface CreateAnnouncementInput {
+  pgId: string;
+  title: string;
+  content: string;
+}
+
+/** Admins manage the text of an announcement; the PG and creator are fixed. */
+export interface UpdateAnnouncementInput {
+  title?: string | null;
+  content?: string | null;
+}

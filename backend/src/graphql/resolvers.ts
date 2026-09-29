@@ -15,6 +15,7 @@ import {
   unauthenticated
 } from '../authUtility/authmiddleware';
 import * as authService from './services/auth.service';
+import * as announcementService from './services/announcement.service';
 import * as complaintService from './services/complaint.service';
 import * as paymentService from './services/payment.service';
 import * as pgService from './services/pg.service';
@@ -137,6 +138,26 @@ export const resolvers = {
       // tenantId is accepted from input (FR-23 role boundary).
       const user = requireTenant(ctx);
       return complaintService.getTenantComplaints(user.id, args);
+    },
+
+    getAllAnnouncements: (
+      _parent: unknown,
+      args: announcementService.AnnouncementListArgs,
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return announcementService.getAllAnnouncements(args);
+    },
+
+    getTenantPgAnnouncements: (
+      _parent: unknown,
+      args: announcementService.AnnouncementHistoryArgs,
+      ctx: GraphQLContext
+    ) => {
+      // The service scopes strictly to the caller's own PG — no pgId is
+      // accepted from input (FR-27 role boundary).
+      const user = requireTenant(ctx);
+      return announcementService.getTenantPgAnnouncements(user.id, args);
     }
   },
 
@@ -258,6 +279,26 @@ export const resolvers = {
     ) => {
       requireAdmin(ctx);
       return complaintService.updateComplaint(args.id, args.input);
+    },
+
+    createAnnouncement: (
+      _parent: unknown,
+      args: { input: announcementService.CreateAnnouncementInput },
+      ctx: GraphQLContext
+    ) => {
+      // The service derives the creator from the caller — an announcement
+      // can never be attributed to another user (FR-25).
+      const user = requireAdmin(ctx);
+      return announcementService.createAnnouncement(user.id, args.input);
+    },
+
+    updateAnnouncement: (
+      _parent: unknown,
+      args: { id: string; input: announcementService.UpdateAnnouncementInput },
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return announcementService.updateAnnouncement(args.id, args.input);
     }
   },
 

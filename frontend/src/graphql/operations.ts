@@ -506,3 +506,83 @@ export const UPDATE_COMPLAINT_MUTATION = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Announcement Management
+// An announcement always belongs to one PG and one creator (the admin who
+// posted it), so the fragment carries both relations: the admin list shows
+// them, the tenant list shows the property name.
+// ---------------------------------------------------------------------------
+
+const ANNOUNCEMENT_FIELDS = gql`
+  fragment AnnouncementFields on Announcement {
+    id
+    title
+    content
+    createdAt
+    updatedAt
+  }
+`;
+
+const ANNOUNCEMENT_WITH_RELATIONS = gql`
+  ${ANNOUNCEMENT_FIELDS}
+  fragment AnnouncementWithRelations on Announcement {
+    ...AnnouncementFields
+    pg {
+      id
+      name
+      city
+    }
+    createdBy {
+      id
+      name
+      email
+    }
+  }
+`;
+
+export const GET_ALL_ANNOUNCEMENTS_QUERY = gql`
+  ${ANNOUNCEMENT_WITH_RELATIONS}
+  query GetAllAnnouncements($search: String, $pgId: ID, $limit: Int, $offset: Int) {
+    getAllAnnouncements(search: $search, pgId: $pgId, limit: $limit, offset: $offset) {
+      items {
+        ...AnnouncementWithRelations
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const GET_TENANT_PG_ANNOUNCEMENTS_QUERY = gql`
+  ${ANNOUNCEMENT_WITH_RELATIONS}
+  query GetTenantPgAnnouncements($limit: Int, $offset: Int) {
+    getTenantPgAnnouncements(limit: $limit, offset: $offset) {
+      items {
+        ...AnnouncementWithRelations
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const CREATE_ANNOUNCEMENT_MUTATION = gql`
+  ${ANNOUNCEMENT_WITH_RELATIONS}
+  mutation CreateAnnouncement($input: CreateAnnouncementInput!) {
+    createAnnouncement(input: $input) {
+      ...AnnouncementWithRelations
+    }
+  }
+`;
+
+export const UPDATE_ANNOUNCEMENT_MUTATION = gql`
+  ${ANNOUNCEMENT_WITH_RELATIONS}
+  mutation UpdateAnnouncement($id: ID!, $input: UpdateAnnouncementInput!) {
+    updateAnnouncement(id: $id, input: $input) {
+      ...AnnouncementWithRelations
+    }
+  }
+`;
