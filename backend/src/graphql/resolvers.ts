@@ -15,6 +15,8 @@ import {
   unauthenticated
 } from '../authUtility/authmiddleware';
 import * as authService from './services/auth.service';
+import * as complaintService from './services/complaint.service';
+import * as paymentService from './services/payment.service';
 import * as pgService from './services/pg.service';
 import * as relationsService from './services/relations.service';
 import * as roomService from './services/room.service';
@@ -77,6 +79,64 @@ export const resolvers = {
     ) => {
       requireAdmin(ctx);
       return tenantService.getAllTenants(args);
+    },
+
+    getAllRentPayments: (
+      _parent: unknown,
+      args: paymentService.RentPaymentListArgs,
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return paymentService.getAllRentPayments(args);
+    },
+
+    getAdminRentSummary: (
+      _parent: unknown,
+      args: paymentService.RentSummaryArgs,
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return paymentService.getAdminRentSummary(args);
+    },
+
+    getRentPaymentHistory: (
+      _parent: unknown,
+      args: paymentService.PaymentHistoryArgs,
+      ctx: GraphQLContext
+    ) => {
+      // The service scopes strictly to the caller's own tenant record — no
+      // tenantId is accepted from input (FR-23/FR-20 role boundary).
+      const user = requireTenant(ctx);
+      return paymentService.getRentPaymentHistory(user.id, args);
+    },
+
+    getAdminRentHistory: (
+      _parent: unknown,
+      args: paymentService.PaymentHistoryArgs,
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return paymentService.getAdminRentHistory(args);
+    },
+
+    getAllComplaints: (
+      _parent: unknown,
+      args: complaintService.ComplaintListArgs,
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return complaintService.getAllComplaints(args);
+    },
+
+    getTenantComplaints: (
+      _parent: unknown,
+      args: complaintService.ComplaintHistoryArgs,
+      ctx: GraphQLContext
+    ) => {
+      // The service scopes strictly to the caller's own tenant record — no
+      // tenantId is accepted from input (FR-23 role boundary).
+      const user = requireTenant(ctx);
+      return complaintService.getTenantComplaints(user.id, args);
     }
   },
 
@@ -160,6 +220,44 @@ export const resolvers = {
     ) => {
       requireAdmin(ctx);
       return tenantService.updateTenant(args.id, args.input);
+    },
+
+    createRentPayment: (
+      _parent: unknown,
+      args: { input: paymentService.CreateRentPaymentInput },
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return paymentService.createRentPayment(args.input);
+    },
+
+    updateRentPayment: (
+      _parent: unknown,
+      args: { id: string; input: paymentService.UpdateRentPaymentInput },
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return paymentService.updateRentPayment(args.id, args.input);
+    },
+
+    createComplaint: (
+      _parent: unknown,
+      args: { input: complaintService.CreateComplaintInput },
+      ctx: GraphQLContext
+    ) => {
+      // The service derives the tenant and PG from the caller — a tenant can
+      // never file a complaint against another tenant's PG (FR-22).
+      const user = requireTenant(ctx);
+      return complaintService.createComplaint(user.id, args.input);
+    },
+
+    updateComplaint: (
+      _parent: unknown,
+      args: { id: string; input: complaintService.UpdateComplaintInput },
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      return complaintService.updateComplaint(args.id, args.input);
     }
   },
 
@@ -223,6 +321,11 @@ export const resolvers = {
   },
 
   RentPayment: {
+    // Live status: a payment's status can change as time passes (a pending
+    // payment silently becomes overdue after its due date) with no write. The
+    // stored value is only the snapshot from the last write; the response
+    // always shows the truth.
+    status: (parent: RentPayment) => paymentService.resolvePaymentStatus(parent),
     createdAt: (parent: RentPayment) => parent.createdAt.toISOString(),
     updatedAt: (parent: RentPayment) => parent.updatedAt.toISOString(),
     tenant: (parent: RentPayment) =>

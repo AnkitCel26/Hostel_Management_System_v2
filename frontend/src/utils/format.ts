@@ -22,6 +22,16 @@ export function formatDate(isoDate: string): string {
   });
 }
 
+/**
+ * Formats a date-only value (YYYY-MM-DD) as a readable local date. Anchored
+ * to local midnight so the calendar day never shifts with the viewer's
+ * timezone (a plain `new Date('2026-09-01')` parses as UTC midnight).
+ */
+export function formatDateOnly(dateOnly: string | null | undefined): string {
+  if (!dateOnly) return '—';
+  return formatDate(`${dateOnly}T00:00:00`);
+}
+
 /** Up to two uppercase initials derived from a person's name (for avatars). */
 export function getInitials(name: string): string {
   const initials = name

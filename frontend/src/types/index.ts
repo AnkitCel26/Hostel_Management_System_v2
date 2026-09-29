@@ -156,3 +156,103 @@ export interface UpdateTenantInput {
   /** Omit to keep the room; null unassigns it; an id assigns/reassigns it. */
   roomId?: string | null;
 }
+
+/** Mirrors the GraphQL PaymentStatus enum (values match the backend exactly, MRD §16). */
+export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'overdue';
+
+/** Mirrors the GraphQL RentPayment type. Status is always the live derived value. */
+export interface RentPayment {
+  id: string;
+  amount: number;
+  paidAmount: number;
+  /** Date-only string (YYYY-MM-DD). */
+  dueDate: string;
+  /** Date-only string (YYYY-MM-DD); set only while the payment is fully paid. */
+  paidDate: string | null;
+  status: PaymentStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present only when the operation selects the tenant relation. */
+  tenant?: Tenant;
+}
+
+/** Mirrors the GraphQL RentPaymentPage type (paginated payment list). */
+export interface RentPaymentPage {
+  items: RentPayment[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Mirrors the GraphQL RentSummary type (admin payment statistics). */
+export interface RentSummary {
+  totalPayments: number;
+  totalBilled: number;
+  totalCollected: number;
+  outstandingAmount: number;
+  pendingCount: number;
+  partialCount: number;
+  paidCount: number;
+  overdueCount: number;
+}
+
+export interface CreateRentPaymentInput {
+  tenantId: string;
+  amount: number;
+  paidAmount?: number | null;
+  /** Calendar date in YYYY-MM-DD format. */
+  dueDate: string;
+  /** Calendar date in YYYY-MM-DD format; only kept while fully paid. */
+  paidDate?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateRentPaymentInput {
+  amount?: number | null;
+  paidAmount?: number | null;
+  dueDate?: string | null;
+  paidDate?: string | null;
+  notes?: string | null;
+}
+
+/** Mirrors the GraphQL ComplaintStatus enum (values match the backend exactly). */
+export type ComplaintStatus = 'open' | 'in_progress' | 'resolved';
+
+/** Mirrors the GraphQL Complaint type. */
+export interface Complaint {
+  id: string;
+  title: string;
+  description: string;
+  status: ComplaintStatus;
+  /** ISO timestamp the server sets when the complaint is resolved; null otherwise. */
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present only when the operation selects the tenant relation. */
+  tenant?: Tenant;
+  /** Present only when the operation selects the pg relation. */
+  pg?: Pg;
+}
+
+/** Mirrors the GraphQL ComplaintPage type (paginated complaint list). */
+export interface ComplaintPage {
+  items: Complaint[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** A tenant files a complaint with a title and description only — the tenant
+ * record, PG, and open status are all derived by the server. */
+export interface CreateComplaintInput {
+  title: string;
+  description: string;
+}
+
+/** Admins manage a complaint; resolvedAt is derived from the status. */
+export interface UpdateComplaintInput {
+  title?: string | null;
+  description?: string | null;
+  status?: ComplaintStatus | null;
+}

@@ -1,5 +1,6 @@
 // GraphQL schema: Phase 2 base types + Phase 3 authentication operations +
-// Phase 4 PG/room management operations + Phase 5 tenant management operations.
+// Phase 4 PG/room management operations + Phase 5 tenant management operations +
+// Phase 6 rent and payment management operations + Phase 7 complaint management operations.
 // Password is intentionally never exposed (FR-34).
 export const typeDefs = `
   type Query {
@@ -25,6 +26,24 @@ export const typeDefs = `
 
     "All tenants, newest first (search matches tenant name, phone, and the linked user's email). Admin-only."
     getAllTenants(search: String, pgId: ID, limit: Int = 20, offset: Int = 0): TenantPage!
+
+    "Searchable, paginated rent payment list (search matches the tenant name, the linked user's email, the tenant's room number, and the payment notes; the status filter matches the live status). Admin-only."
+    getAllRentPayments(search: String, pgId: ID, tenantId: ID, status: PaymentStatus, limit: Int = 20, offset: Int = 0): RentPaymentPage!
+
+    "Aggregate payment statistics (counts by status, billed, collected, outstanding), optionally scoped to one PG. Admin-only."
+    getAdminRentSummary(pgId: ID): RentSummary!
+
+    "The current tenant's own payment history, newest due date first. Tenant-only."
+    getRentPaymentHistory(limit: Int = 20, offset: Int = 0): RentPaymentPage!
+
+    "Recently updated payment records (activity view). Admin-only."
+    getAdminRentHistory(limit: Int = 20, offset: Int = 0): RentPaymentPage!
+
+    "Searchable, paginated complaint list (search matches the tenant name, the linked user's email, the tenant's room number, the PG name, the complaint title, and the description). Admin-only."
+    getAllComplaints(search: String, pgId: ID, tenantId: ID, status: ComplaintStatus, limit: Int = 20, offset: Int = 0): ComplaintPage!
+
+    "The current tenant's own complaints, newest first. Tenant-only."
+    getTenantComplaints(limit: Int = 20, offset: Int = 0): ComplaintPage!
   }
 
   type Mutation {
@@ -60,6 +79,18 @@ export const typeDefs = `
 
     "Update a tenant. Omit or pass null to leave a field unchanged; send an empty string to clear an optional field. Room assignment changes update occupancy atomically. Admin-only."
     updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+
+    "Create a rent payment record for a tenant. Status is never accepted from input - it is derived from paidAmount and the due date. Admin-only."
+    createRentPayment(input: CreateRentPaymentInput!): RentPayment!
+
+    "Update a rent payment. Omit or pass null to leave a field unchanged; send an empty string to clear the notes. Status and paidDate are always re-derived. Admin-only."
+    updateRentPayment(id: ID!, input: UpdateRentPaymentInput!): RentPayment!
+
+    "Create a complaint for the current tenant. The tenant, PG, status, and resolvedAt are all system-derived — never accepted from input. Tenant-only."
+    createComplaint(input: CreateComplaintInput!): Complaint!
+
+    "Update a complaint. Omit or pass null to leave a field unchanged. resolvedAt is system-managed alongside the status. Admin-only."
+    updateComplaint(id: ID!, input: UpdateComplaintInput!): Complaint!
   }
 
   input RegisterInput {
@@ -136,6 +167,47 @@ export const typeDefs = `
     pgId: ID
     "Omit to keep the room; null/'' unassigns it; an id assigns/reassigns it (the room must belong to the tenant's PG after this update)."
     roomId: ID
+  }
+
+  input CreateRentPaymentInput {
+    "Existing tenant record the payment belongs to."
+    tenantId: ID!
+    "Total rent due (a whole number greater than zero)."
+    amount: Int!
+    "Amount paid so far; defaults to 0 and can never exceed amount."
+    paidAmount: Int
+    "Calendar date in YYYY-MM-DD format."
+    dueDate: String!
+    "Calendar date in YYYY-MM-DD format; only settable while the payment is fully paid, and defaults to today."
+    paidDate: String
+    notes: String
+  }
+
+  input UpdateRentPaymentInput {
+    "Total rent due (a whole number greater than zero)."
+    amount: Int
+    "Amount paid so far; can never exceed amount."
+    paidAmount: Int
+    "Calendar date in YYYY-MM-DD format."
+    dueDate: String
+    "Calendar date in YYYY-MM-DD format; only settable while the payment is fully paid, and defaults to today."
+    paidDate: String
+    notes: String
+  }
+
+  input CreateComplaintInput {
+    "Short complaint summary (1-160 characters)."
+    title: String!
+    "What happened and what is expected (1-5000 characters)."
+    description: String!
+  }
+
+  input UpdateComplaintInput {
+    "Short complaint summary (1-160 characters)."
+    title: String
+    "What happened and what is expected (1-5000 characters)."
+    description: String
+    status: ComplaintStatus
   }
 
   "User role used for Admin/Tenant authorization boundaries."
@@ -280,5 +352,33 @@ export const typeDefs = `
     total: Int!
     limit: Int!
     offset: Int!
+  }
+
+  "One page of a paginated rent payment list (same shape as RoomPage, MRD §16)."
+  type RentPaymentPage {
+    items: [RentPayment!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+
+  "One page of a paginated complaint list (same shape as RoomPage, MRD §16)."
+  type ComplaintPage {
+    items: [Complaint!]!
+    total: Int!
+    limit: Int!
+    offset: Int!
+  }
+
+  "Aggregate rent statistics for the admin summary. The status counts use the same live status rule the payment list displays."
+  type RentSummary {
+    totalPayments: Int!
+    totalBilled: Int!
+    totalCollected: Int!
+    outstandingAmount: Int!
+    pendingCount: Int!
+    partialCount: Int!
+    paidCount: Int!
+    overdueCount: Int!
   }
 `;

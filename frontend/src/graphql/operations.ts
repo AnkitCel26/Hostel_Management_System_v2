@@ -283,3 +283,226 @@ export const UPDATE_TENANT_MUTATION = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Rent and Payment Management
+// Status is always the live derived value (never accepted from input).
+// ---------------------------------------------------------------------------
+
+const PAYMENT_FIELDS = gql`
+  fragment PaymentFields on RentPayment {
+    id
+    amount
+    paidAmount
+    dueDate
+    paidDate
+    status
+    notes
+    createdAt
+    updatedAt
+  }
+`;
+
+const PAYMENT_WITH_TENANT = gql`
+  ${PAYMENT_FIELDS}
+  fragment PaymentWithTenant on RentPayment {
+    ...PaymentFields
+    tenant {
+      id
+      name
+      user {
+        id
+        name
+        email
+      }
+      pg {
+        id
+        name
+      }
+      room {
+        id
+        roomNumber
+      }
+    }
+  }
+`;
+
+export const GET_ALL_PAYMENTS_QUERY = gql`
+  ${PAYMENT_WITH_TENANT}
+  query GetAllRentPayments(
+    $search: String
+    $pgId: ID
+    $tenantId: ID
+    $status: PaymentStatus
+    $limit: Int
+    $offset: Int
+  ) {
+    getAllRentPayments(
+      search: $search
+      pgId: $pgId
+      tenantId: $tenantId
+      status: $status
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        ...PaymentWithTenant
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const GET_ADMIN_RENT_SUMMARY_QUERY = gql`
+  query GetAdminRentSummary($pgId: ID) {
+    getAdminRentSummary(pgId: $pgId) {
+      totalPayments
+      totalBilled
+      totalCollected
+      outstandingAmount
+      pendingCount
+      partialCount
+      paidCount
+      overdueCount
+    }
+  }
+`;
+
+export const GET_TENANT_PAYMENT_HISTORY_QUERY = gql`
+  ${PAYMENT_WITH_TENANT}
+  query GetRentPaymentHistory($limit: Int, $offset: Int) {
+    getRentPaymentHistory(limit: $limit, offset: $offset) {
+      items {
+        ...PaymentWithTenant
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const CREATE_RENT_PAYMENT_MUTATION = gql`
+  ${PAYMENT_WITH_TENANT}
+  mutation CreateRentPayment($input: CreateRentPaymentInput!) {
+    createRentPayment(input: $input) {
+      ...PaymentWithTenant
+    }
+  }
+`;
+
+export const UPDATE_RENT_PAYMENT_MUTATION = gql`
+  ${PAYMENT_WITH_TENANT}
+  mutation UpdateRentPayment($id: ID!, $input: UpdateRentPaymentInput!) {
+    updateRentPayment(id: $id, input: $input) {
+      ...PaymentWithTenant
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Phase 7 — Complaint Management
+// A new complaint is always filed by the current tenant under their own PG:
+// only title and description are sent, and status is admin-managed.
+// ---------------------------------------------------------------------------
+
+const COMPLAINT_FIELDS = gql`
+  fragment ComplaintFields on Complaint {
+    id
+    title
+    description
+    status
+    resolvedAt
+    createdAt
+    updatedAt
+  }
+`;
+
+const COMPLAINT_WITH_TENANT = gql`
+  ${COMPLAINT_FIELDS}
+  fragment ComplaintWithTenant on Complaint {
+    ...ComplaintFields
+    tenant {
+      id
+      name
+      user {
+        id
+        email
+      }
+      pg {
+        id
+        name
+      }
+      room {
+        id
+        roomNumber
+      }
+    }
+    pg {
+      id
+      name
+    }
+  }
+`;
+
+export const GET_ALL_COMPLAINTS_QUERY = gql`
+  ${COMPLAINT_WITH_TENANT}
+  query GetAllComplaints(
+    $search: String
+    $pgId: ID
+    $tenantId: ID
+    $status: ComplaintStatus
+    $limit: Int
+    $offset: Int
+  ) {
+    getAllComplaints(
+      search: $search
+      pgId: $pgId
+      tenantId: $tenantId
+      status: $status
+      limit: $limit
+      offset: $offset
+    ) {
+      items {
+        ...ComplaintWithTenant
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const GET_TENANT_COMPLAINTS_QUERY = gql`
+  ${COMPLAINT_WITH_TENANT}
+  query GetTenantComplaints($limit: Int, $offset: Int) {
+    getTenantComplaints(limit: $limit, offset: $offset) {
+      items {
+        ...ComplaintWithTenant
+      }
+      total
+      limit
+      offset
+    }
+  }
+`;
+
+export const CREATE_COMPLAINT_MUTATION = gql`
+  ${COMPLAINT_WITH_TENANT}
+  mutation CreateComplaint($input: CreateComplaintInput!) {
+    createComplaint(input: $input) {
+      ...ComplaintWithTenant
+    }
+  }
+`;
+
+export const UPDATE_COMPLAINT_MUTATION = gql`
+  ${COMPLAINT_WITH_TENANT}
+  mutation UpdateComplaint($id: ID!, $input: UpdateComplaintInput!) {
+    updateComplaint(id: $id, input: $input) {
+      ...ComplaintWithTenant
+    }
+  }
+`;

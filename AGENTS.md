@@ -87,12 +87,13 @@ Do not automatically continue to the next phase.
    `ProductPreview` (decorative mini-dashboard visual),
    `LoadingIndicator`, `ErrorAlert`, `PageHeader` (page heading + action
    slot), `EmptyState`, `OccupancyChip` (room occupancy status),
-   `StatCard` (summary statistic tile with tinted icon badge).
+   `StatCard` (summary statistic tile with tinted icon badge),
+   `PaymentStatusChip` (rent payment status).
    Reuse these before creating new ones. Portal chrome lives in
    `src/components/portal/`: `PortalShell` (sidebar + top bar layout for
    post-login routes) and `portalNav` (per-role navigation config).
    Admin-specific dialogs live in `src/components/admin/`:
-   `PgFormDialog`, `RoomFormDialog`, `TenantFormDialog`.
+   `PgFormDialog`, `RoomFormDialog`, `TenantFormDialog`, `PaymentFormDialog`.
 
 4. GraphQL operations live in `src/graphql/operations.ts` — do not inline
    `gql` documents in pages/components.
