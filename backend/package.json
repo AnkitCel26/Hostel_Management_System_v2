@@ -13,7 +13,15 @@
     "migration:run": "npm run build && typeorm migration:run -d dist/config/db.js",
     "migration:revert": "npm run build && typeorm migration:revert -d dist/config/db.js",
     "verify:entities": "ts-node --transpile-only src/scripts/verifyCoreEntities.ts",
+    "verify:phase4": "ts-node --transpile-only src/scripts/verifyPhase4.ts",
+    "verify:phase5": "ts-node --transpile-only src/scripts/verifyPhase5.ts",
+    "verify:phase6": "ts-node --transpile-only src/scripts/verifyPhase6.ts",
+    "verify:phase7": "ts-node --transpile-only src/scripts/verifyPhase7.ts",
+    "verify:phase8": "ts-node --transpile-only src/scripts/verifyPhase8.ts",
+    "verify:phase9": "ts-node --transpile-only src/scripts/verifyPhase9.ts",
+    "verify:phase10": "ts-node --transpile-only src/scripts/verifyPhase10.ts",
     "seed:admin": "ts-node --transpile-only src/scripts/createAdmin.ts",
+    "seed:demo": "ts-node --transpile-only src/scripts/seedDemoData.ts",
     "test": "echo \"No tests yet\""
   },
   "dependencies": {

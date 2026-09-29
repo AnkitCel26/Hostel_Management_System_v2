@@ -13,6 +13,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  Tooltip,
   Typography
 } from '@mui/material';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -21,9 +22,11 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { LoadingIndicator } from '../../components/LoadingIndicator';
 import { PageHeader } from '../../components/PageHeader';
+import { PayRentDialog } from '../../components/PayRentDialog';
 import { PaymentStatusChip } from '../../components/PaymentStatusChip';
+import { useSnackbar } from '../../context/SnackbarContext';
 import { GET_TENANT_PAYMENT_HISTORY_QUERY } from '../../graphql/operations';
-import type { RentPaymentPage } from '../../types';
+import type { RentPayment, RentPaymentPage } from '../../types';
 import { formatCurrency, formatDateOnly } from '../../utils/format';
 
 interface GetTenantHistoryData {
@@ -46,6 +49,12 @@ const headCellSx = {
 export function TenantPaymentsPage() {
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
+  const { success } = useSnackbar();
+
+  const [payDialog, setPayDialog] = React.useState<{ open: boolean; payment: RentPayment | null }>({
+    open: false,
+    payment: null
+  });
 
   const { data, previousData, loading, error, refetch } = useQuery<GetTenantHistoryData>(
     GET_TENANT_PAYMENT_HISTORY_QUERY,
@@ -60,11 +69,20 @@ export function TenantPaymentsPage() {
   const payments = paymentPage?.items ?? [];
   const total = paymentPage?.total ?? 0;
 
+  const openPay = (payment: RentPayment) => setPayDialog({ open: true, payment });
+  const closePayDialog = () => setPayDialog({ open: false, payment: null });
+
+  const handlePaid = (message: string): void => {
+    closePayDialog();
+    success(message);
+    void refetch();
+  };
+
   return (
     <Box>
       <PageHeader
         title="My Payments"
-        subtitle="Your rent records, payment status, and paid dates."
+        subtitle="Your rent records — pay in part or in full, and follow each month's status."
       />
 
       {error ? (
@@ -81,7 +99,7 @@ export function TenantPaymentsPage() {
           <EmptyState
             icon={<ReceiptLongIcon fontSize="large" />}
             title="No payments yet"
-            message="When your property manager records a rent payment for you, it will show up here."
+            message="When your property manager records a rent payment for you, you can pay it here — in part or in full."
           />
         </Card>
       ) : (
@@ -99,42 +117,82 @@ export function TenantPaymentsPage() {
                   <TableCell sx={headCellSx}>Due Date</TableCell>
                   <TableCell sx={headCellSx} align="right">Rent</TableCell>
                   <TableCell sx={headCellSx} align="right">Paid</TableCell>
+                  <TableCell sx={headCellSx} align="right">Remaining</TableCell>
                   <TableCell sx={headCellSx}>Paid Date</TableCell>
                   <TableCell sx={headCellSx}>Status</TableCell>
                   <TableCell sx={headCellSx}>Notes</TableCell>
+                  <TableCell sx={headCellSx} align="right">Pay</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={600}>
-                        {formatDateOnly(payment.dueDate)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" fontWeight={600}>
-                        {formatCurrency(payment.amount)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" color="text.secondary">
-                        {formatCurrency(payment.paidAmount)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{formatDateOnly(payment.paidDate)}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <PaymentStatusChip status={payment.status} />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {payment.notes ?? '—'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {payments.map((payment) => {
+                  const remaining = payment.amount - payment.paidAmount;
+                  const fullyPaid = remaining <= 0;
+                  return (
+                    <TableRow key={payment.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>
+                          {formatDateOnly(payment.dueDate)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={600}>
+                          {formatCurrency(payment.amount)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="text.secondary">
+                          {formatCurrency(payment.paidAmount)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography
+                          variant="body2"
+                          color={fullyPaid ? 'text.secondary' : 'text.primary'}
+                          fontWeight={600}
+                        >
+                          {formatCurrency(remaining)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{formatDateOnly(payment.paidDate)}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <PaymentStatusChip status={payment.status} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {payment.notes ?? '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Tooltip
+                          title={
+                            fullyPaid
+                              ? "This month's rent is fully paid"
+                              : `Pay toward the rent due ${formatDateOnly(payment.dueDate)}`
+                          }
+                        >
+                          <span>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={fullyPaid}
+                              onClick={() => openPay(payment)}
+                              aria-label={
+                                fullyPaid
+                                  ? `Rent for ${formatDateOnly(payment.dueDate)} fully paid`
+                                  : `Pay toward the rent due ${formatDateOnly(payment.dueDate)}`
+                              }
+                            >
+                              {fullyPaid ? 'Paid in full' : 'Pay'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -153,6 +211,13 @@ export function TenantPaymentsPage() {
           />
         </Card>
       )}
+
+      <PayRentDialog
+        open={payDialog.open}
+        payment={payDialog.payment}
+        onClose={closePayDialog}
+        onPaid={handlePaid}
+      />
     </Box>
   );
 }

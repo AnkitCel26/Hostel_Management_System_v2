@@ -335,3 +335,50 @@ export interface UpdateTenantDocsInput {
   docUrl?: string | null;
   docNumber?: string | null;
 }
+
+/* ------------------------------------------------------------------------ */
+/* Phase 10 — Dashboards                                                     */
+/* ------------------------------------------------------------------------ */
+
+/** One property's occupancy row on the admin dashboard chart. */
+export interface PropertyOccupancy {
+  pgId: string;
+  pgName: string;
+  totalRooms: number;
+  occupiedRooms: number;
+  totalBeds: number;
+  occupiedBeds: number;
+  /** Whole percent of beds occupied (0 when the property has no beds). */
+  occupancyPercent: number;
+}
+
+/**
+ * Mirrors the GraphQL AdminDashboardStats type. Every count is a full-table
+ * aggregate from the server, and the payment status counts use the same live
+ * status rule the payments page shows.
+ */
+export interface AdminDashboardStats {
+  totalPgs: number;
+  totalRooms: number;
+  occupiedRooms: number;
+  vacantRooms: number;
+  totalBeds: number;
+  occupiedBeds: number;
+  occupancyPercent: number;
+  totalTenants: number;
+  totalPayments: number;
+  paidCount: number;
+  partialCount: number;
+  pendingCount: number;
+  overdueCount: number;
+  totalBilled: number;
+  totalCollected: number;
+  outstandingAmount: number;
+  openComplaints: number;
+  inProgressComplaints: number;
+  resolvedComplaints: number;
+  totalAnnouncements: number;
+  occupancyByProperty: PropertyOccupancy[];
+  recentPayments: RentPaymentPage;
+  recentComplaints: ComplaintPage;
+}

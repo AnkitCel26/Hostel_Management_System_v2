@@ -54,6 +54,9 @@ export const typeDefs = `
 
     "The current tenant's own documents, newest first. Tenant-only."
     getTenantDocuments(limit: Int = 20, offset: Int = 0): TenantDocumentPage!
+
+    "Operational statistics, per-property occupancy, and recent activity for the admin dashboard. Optionally scoped to one PG; recentLimit bounds both recent-activity lists (1-20, default 5). Admin-only."
+    getAdminDashboardStats(pgId: ID, recentLimit: Int = 5): AdminDashboardStats!
   }
 
   type Mutation {
@@ -95,6 +98,9 @@ export const typeDefs = `
 
     "Update a rent payment. Omit or pass null to leave a field unchanged; send an empty string to clear the notes. Status and paidDate are always re-derived. Admin-only."
     updateRentPayment(id: ID!, input: UpdateRentPaymentInput!): RentPayment!
+
+    "Pay toward one of the current tenant's own rent payments. The amount is added to the amount already paid until the payment is fully paid; status and paidDate are re-derived. The payment must belong to the current tenant. Tenant-only."
+    payRent(input: PayRentInput!): RentPayment!
 
     "Create a complaint for the current tenant. The tenant, PG, status, and resolvedAt are all system-derived — never accepted from input. Tenant-only."
     createComplaint(input: CreateComplaintInput!): Complaint!
@@ -218,6 +224,13 @@ export const typeDefs = `
     "Calendar date in YYYY-MM-DD format; only settable while the payment is fully paid, and defaults to today."
     paidDate: String
     notes: String
+  }
+
+  input PayRentInput {
+    "The rent payment to pay toward. It must belong to the current tenant."
+    paymentId: ID!
+    "Amount to pay now (a whole number greater than zero); it is added to the amount already paid and can never exceed the remaining rent."
+    amount: Int!
   }
 
   input CreateComplaintInput {
@@ -461,5 +474,45 @@ export const typeDefs = `
     partialCount: Int!
     paidCount: Int!
     overdueCount: Int!
+  }
+
+  "One property's occupancy, used for the admin dashboard's per-property chart."
+  type PropertyOccupancy {
+    pgId: ID!
+    pgName: String!
+    totalRooms: Int!
+    occupiedRooms: Int!
+    totalBeds: Int!
+    occupiedBeds: Int!
+    "Whole percent of beds occupied (0 when the property has no beds)."
+    occupancyPercent: Int!
+  }
+
+  "Everything the admin dashboard renders in one response (FR-31, MRD §10.9). Every count is a full-table aggregate, and the payment status counts reuse the same live status rule as the payment list and the rent summary."
+  type AdminDashboardStats {
+    totalPgs: Int!
+    totalRooms: Int!
+    occupiedRooms: Int!
+    vacantRooms: Int!
+    totalBeds: Int!
+    occupiedBeds: Int!
+    "Whole percent of beds occupied across the scope (0 when there are no beds)."
+    occupancyPercent: Int!
+    totalTenants: Int!
+    totalPayments: Int!
+    paidCount: Int!
+    partialCount: Int!
+    pendingCount: Int!
+    overdueCount: Int!
+    totalBilled: Int!
+    totalCollected: Int!
+    outstandingAmount: Int!
+    openComplaints: Int!
+    inProgressComplaints: Int!
+    resolvedComplaints: Int!
+    totalAnnouncements: Int!
+    occupancyByProperty: [PropertyOccupancy!]!
+    recentPayments: RentPaymentPage!
+    recentComplaints: ComplaintPage!
   }
 `;

@@ -199,6 +199,16 @@ function check(label: string, actual: unknown, expected: unknown): void {
   console.log(`PASS: ${label}`);
 }
 
+/**
+ * These tests share the database with the app's other data (e.g. the demo
+ * seed), so an unscoped count is only meaningful as a change from a baseline
+ * taken before this script creates its fixtures. The scoped assertions (by
+ * pgId, tenantId, or search) are unaffected and stay absolute.
+ */
+function checkDelta(label: string, after: number, before: number, added: number): void {
+  check(`${label} (+${added})`, after - before, added);
+}
+
 function field<T>(result: GqlResult, key: string): T {
   if (result.errors && result.errors.length > 0) {
     throw new Error(`FAIL unexpected GraphQL errors: ${result.errors[0].message}`);
@@ -322,6 +332,11 @@ async function main(): Promise<void> {
     );
     const roomlessUser = await createTestUser('Roomless Tenant', ROOMLESS_EMAIL);
     const asTenant = (user: User): AuthUser => ({ id: user.id, role: 'Tenant' });
+
+    // Baseline: what the unscoped aggregates looked like before this script
+    // created any of its own payments.
+    const baseline = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
+    const baselineTotal = baseline.totalPayments;
 
     // --- PGs, a room, and tenants (Phase 4/5 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
@@ -553,9 +568,9 @@ async function main(): Promise<void> {
     // --- getAllRentPayments: pagination, search, filters (FR-21) ---
     // Created so far: p1 (rahul pending), p2 (rahul partial), p3 (priya paid),
     // p4 (priya overdue), p5 (cross pending), p6 (rahul paid), stale (rahul
-    // live-overdue). Alpha = 6 payments, beta = 1, global = 7.
+    // live-overdue). Alpha = 6 payments, beta = 1, +7 unscoped.
     const globalPage = field<PaymentPageShape>(await exec(GET_PAYMENTS, {}, asAdmin), 'getAllRentPayments');
-    check('the payment list reports the global total', globalPage.total, 7);
+    checkDelta('the payment list reports the global total', globalPage.total, baselineTotal, 7);
     check('the payment list defaults to limit 20', globalPage.limit, 20);
 
     const alphaPage = field<PaymentPageShape>(
@@ -586,40 +601,48 @@ async function main(): Promise<void> {
       await exec(GET_PAYMENTS, { status: 'paid' }, asAdmin),
       'getAllRentPayments'
     );
-    check('the paid filter counts the fully paid payments', paidFilter.total, 2);
+    checkDelta('the paid filter counts the fully paid payments', paidFilter.total, baseline.paidCount, 2);
     const overdueFilter = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { status: 'overdue' }, asAdmin),
       'getAllRentPayments'
     );
-    check('the overdue filter matches the live status (stale row included)', overdueFilter.total, 2);
+    checkDelta(
+      'the overdue filter matches the live status (stale row included)',
+      overdueFilter.total,
+      baseline.overdueCount,
+      2
+    );
     const pendingFilter = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { status: 'pending' }, asAdmin),
       'getAllRentPayments'
     );
-    check('the pending filter excludes the stale overdue row', pendingFilter.total, 2);
+    checkDelta('the pending filter excludes the stale overdue row', pendingFilter.total, baseline.pendingCount, 2);
     const partialFilter = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { status: 'partial' }, asAdmin),
       'getAllRentPayments'
     );
-    check('the partial filter counts partial payments', partialFilter.total, 1);
+    checkDelta('the partial filter counts partial payments', partialFilter.total, baseline.partialCount, 1);
 
+    // The search terms below are unique to this script's fixtures, but the
+    // count is scoped to alpha anyway so the expected totals stay exact
+    // regardless of what other data shares the database.
     const byName = field<PaymentPageShape>(
-      await exec(GET_PAYMENTS, { search: 'rahul verma' }, asAdmin),
+      await exec(GET_PAYMENTS, { search: 'rahul verma', pgId: alpha.id }, asAdmin),
       'getAllRentPayments'
     );
     check('search matches the tenant name case-insensitively', byName.total, 4);
     const byEmail = field<PaymentPageShape>(
-      await exec(GET_PAYMENTS, { search: 'phase6.rahul' }, asAdmin),
+      await exec(GET_PAYMENTS, { search: 'phase6.rahul', pgId: alpha.id }, asAdmin),
       'getAllRentPayments'
     );
     check('search matches the linked user email', byEmail.total, 4);
     const byRoom = field<PaymentPageShape>(
-      await exec(GET_PAYMENTS, { search: 'a-101' }, asAdmin),
+      await exec(GET_PAYMENTS, { search: 'a-101', pgId: alpha.id }, asAdmin),
       'getAllRentPayments'
     );
     check('search matches the tenant room number', byRoom.total, 4);
     const byNotes = field<PaymentPageShape>(
-      await exec(GET_PAYMENTS, { search: 'backdated full payment' }, asAdmin),
+      await exec(GET_PAYMENTS, { search: 'backdated full payment', pgId: alpha.id }, asAdmin),
       'getAllRentPayments'
     );
     check('search matches the payment notes', byNotes.total, 1);
@@ -634,10 +657,13 @@ async function main(): Promise<void> {
       'getAllRentPayments'
     );
     check('the payment list paginates items', limited.items.length, 3);
-    check('the payment list reports the total across pages', limited.total, 7);
+    checkDelta('the payment list reports the total across pages', limited.total, baselineTotal, 7);
     check('the payment list echoes limit/offset', `${limited.limit}/${limited.offset}`, '3/0');
+    // The final page offset depends on the real global total, so it is
+    // derived rather than hard-coded.
+    const tailOffset = globalPage.total - 1;
     const tail = field<PaymentPageShape>(
-      await exec(GET_PAYMENTS, { limit: 3, offset: 6 }, asAdmin),
+      await exec(GET_PAYMENTS, { limit: 3, offset: tailOffset }, asAdmin),
       'getAllRentPayments'
     );
     check('the payment list returns the final partial page', tail.items.length, 1);
@@ -693,14 +719,19 @@ async function main(): Promise<void> {
     // outstanding 31000; pending 2 (p1, p5), partial 1 (p2), paid 2 (p3, p6),
     // overdue 2 (p4, stale-live).
     const globalSummary = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
-    check('the summary counts all payments', globalSummary.totalPayments, 7);
-    check('the summary sums the billed amounts', globalSummary.totalBilled, 49000);
-    check('the summary sums the collected amounts', globalSummary.totalCollected, 18000);
-    check('the summary computes the outstanding amount', globalSummary.outstandingAmount, 31000);
-    check('the summary counts pending payments', globalSummary.pendingCount, 2);
-    check('the summary counts partial payments', globalSummary.partialCount, 1);
-    check('the summary counts paid payments', globalSummary.paidCount, 2);
-    check('the summary counts overdue payments (live)', globalSummary.overdueCount, 2);
+    checkDelta('the summary counts all payments', globalSummary.totalPayments, baseline.totalPayments, 7);
+    checkDelta('the summary sums the billed amounts', globalSummary.totalBilled, baseline.totalBilled, 49000);
+    checkDelta('the summary sums the collected amounts', globalSummary.totalCollected, baseline.totalCollected, 18000);
+    checkDelta(
+      'the summary computes the outstanding amount',
+      globalSummary.outstandingAmount,
+      baseline.outstandingAmount,
+      31000
+    );
+    checkDelta('the summary counts pending payments', globalSummary.pendingCount, baseline.pendingCount, 2);
+    checkDelta('the summary counts partial payments', globalSummary.partialCount, baseline.partialCount, 1);
+    checkDelta('the summary counts paid payments', globalSummary.paidCount, baseline.paidCount, 2);
+    checkDelta('the summary counts overdue payments (live)', globalSummary.overdueCount, baseline.overdueCount, 2);
 
     const alphaSummary = field<SummaryShape>(
       await exec(GET_SUMMARY, { pgId: alpha.id }, asAdmin),
@@ -888,20 +919,27 @@ async function main(): Promise<void> {
     // paid, p4 5000/0 pending, p6 9000/9000 paid, stale 4000/0 overdue.
     // Beta: p5 7000/7000 paid.
     const finalGlobal = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
-    check('the final summary counts all payments', finalGlobal.totalPayments, 7);
-    check('the final summary sums billed', finalGlobal.totalBilled, 44000);
-    check('the final summary sums collected', finalGlobal.totalCollected, 35000);
-    check('the final summary computes outstanding', finalGlobal.outstandingAmount, 9000);
-    check('the final summary counts pending', finalGlobal.pendingCount, 1);
-    check('the final summary counts partial', finalGlobal.partialCount, 0);
-    check('the final summary counts paid', finalGlobal.paidCount, 5);
-    check('the final summary counts overdue', finalGlobal.overdueCount, 1);
+    checkDelta('the final summary counts all payments', finalGlobal.totalPayments, baseline.totalPayments, 7);
+    checkDelta('the final summary sums billed', finalGlobal.totalBilled, baseline.totalBilled, 44000);
+    checkDelta('the final summary sums collected', finalGlobal.totalCollected, baseline.totalCollected, 35000);
+    checkDelta(
+      'the final summary computes outstanding',
+      finalGlobal.outstandingAmount,
+      baseline.outstandingAmount,
+      9000
+    );
+    checkDelta('the final summary counts pending', finalGlobal.pendingCount, baseline.pendingCount, 1);
+    // The fixtures end with no partial payments, so the global count returns
+    // to whatever the baseline had.
+    check('the final summary counts partial', finalGlobal.partialCount, baseline.partialCount);
+    checkDelta('the final summary counts paid', finalGlobal.paidCount, baseline.paidCount, 5);
+    checkDelta('the final summary counts overdue', finalGlobal.overdueCount, baseline.overdueCount, 1);
 
     const finalPaidFilter = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { status: 'paid' }, asAdmin),
       'getAllRentPayments'
     );
-    check('the final paid filter agrees with the summary', finalPaidFilter.total, 5);
+    checkDelta('the final paid filter agrees with the summary', finalPaidFilter.total, baseline.paidCount, 5);
     const finalAlpha = field<SummaryShape>(
       await exec(GET_SUMMARY, { pgId: alpha.id }, asAdmin),
       'getAdminRentSummary'
@@ -914,7 +952,7 @@ async function main(): Promise<void> {
       await exec(GET_ADMIN_HISTORY, { limit: 3 }, asAdmin),
       'getAdminRentHistory'
     );
-    check('the admin history reports the total', historyFeed.total, 7);
+    checkDelta('the admin history reports the total', historyFeed.total, baselineTotal, 7);
     check('the admin history respects the limit', historyFeed.items.length, 3);
     check(
       'the admin history leads with the most recently updated payment',

@@ -402,6 +402,17 @@ export const UPDATE_RENT_PAYMENT_MUTATION = gql`
   }
 `;
 
+// Tenant self-service payment: adds to the amount already paid on one of the
+// tenant's own payments (the tenant relation is not needed in the response).
+export const PAY_RENT_MUTATION = gql`
+  ${PAYMENT_FIELDS}
+  mutation PayRent($input: PayRentInput!) {
+    payRent(input: $input) {
+      ...PaymentFields
+    }
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Phase 7 — Complaint Management
 // A new complaint is always filed by the current tenant under their own PG:
@@ -640,5 +651,108 @@ export const UPDATE_TENANT_DOCS_MUTATION = gql`
 export const DELETE_TENANT_DOCUMENTS_MUTATION = gql`
   mutation DeleteTenantDocuments($ids: [ID!]!) {
     deleteTenantDocuments(ids: $ids)
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Phase 10 — Dashboards
+// One admin query returns every count, the per-property occupancy series, and
+// both recent-activity lists, so the dashboard is a single round trip. The
+// tenant dashboard reuses the existing tenant-scoped operations (room,
+// payments, complaints, announcements) — each is already scoped to the caller
+// server-side, so no tenant-specific dashboard query is needed.
+// ---------------------------------------------------------------------------
+
+const RECENT_PAYMENT_FIELDS = gql`
+  fragment RecentPaymentFields on RentPayment {
+    id
+    amount
+    paidAmount
+    dueDate
+    paidDate
+    status
+    createdAt
+    updatedAt
+    tenant {
+      id
+      name
+      room {
+        id
+        roomNumber
+      }
+    }
+  }
+`;
+
+const RECENT_COMPLAINT_FIELDS = gql`
+  fragment RecentComplaintFields on Complaint {
+    id
+    title
+    status
+    resolvedAt
+    createdAt
+    updatedAt
+    tenant {
+      id
+      name
+      room {
+        id
+        roomNumber
+      }
+    }
+  }
+`;
+
+export const GET_ADMIN_DASHBOARD_STATS_QUERY = gql`
+  ${RECENT_PAYMENT_FIELDS}
+  ${RECENT_COMPLAINT_FIELDS}
+  query GetAdminDashboardStats($pgId: ID) {
+    getAdminDashboardStats(pgId: $pgId) {
+      totalPgs
+      totalRooms
+      occupiedRooms
+      vacantRooms
+      totalBeds
+      occupiedBeds
+      occupancyPercent
+      totalTenants
+      totalPayments
+      paidCount
+      partialCount
+      pendingCount
+      overdueCount
+      totalBilled
+      totalCollected
+      outstandingAmount
+      openComplaints
+      inProgressComplaints
+      resolvedComplaints
+      totalAnnouncements
+      occupancyByProperty {
+        pgId
+        pgName
+        totalRooms
+        occupiedRooms
+        totalBeds
+        occupiedBeds
+        occupancyPercent
+      }
+      recentPayments {
+        items {
+          ...RecentPaymentFields
+        }
+        total
+        limit
+        offset
+      }
+      recentComplaints {
+        items {
+          ...RecentComplaintFields
+        }
+        total
+        limit
+        offset
+      }
+    }
   }
 `;

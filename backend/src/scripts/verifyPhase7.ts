@@ -170,6 +170,39 @@ function check(label: string, actual: unknown, expected: unknown): void {
   console.log(`PASS: ${label}`);
 }
 
+/**
+ * The database is shared with the app's other data (e.g. the demo seed), so
+ * an unscoped count is only meaningful as a change from a baseline taken
+ * before this script creates its own complaints. Assertions scoped by pgId,
+ * tenantId, or search term stay absolute.
+ */
+function checkDelta(label: string, after: number, before: number, added: number): void {
+  check(`${label} (+${added})`, after - before, added);
+}
+
+/**
+ * Global complaint counts by status, used as the delta baseline. The three
+ * counts are independent, so they run together.
+ */
+async function countByStatus(): Promise<Record<'open' | 'in_progress' | 'resolved', number>> {
+  const repo = AppDataSource.getRepository(Complaint);
+  const [open, inProgress, resolved] = await Promise.all([
+    repo
+      .createQueryBuilder('complaint')
+      .where('complaint.status = :status', { status: ComplaintStatus.Open })
+      .getCount(),
+    repo
+      .createQueryBuilder('complaint')
+      .where('complaint.status = :status', { status: ComplaintStatus.InProgress })
+      .getCount(),
+    repo
+      .createQueryBuilder('complaint')
+      .where('complaint.status = :status', { status: ComplaintStatus.Resolved })
+      .getCount()
+  ]);
+  return { open, in_progress: inProgress, resolved };
+}
+
 function field<T>(result: GqlResult, key: string): T {
   if (result.errors && result.errors.length > 0) {
     throw new Error(`FAIL unexpected GraphQL errors: ${result.errors[0].message}`);
@@ -269,6 +302,11 @@ async function main(): Promise<void> {
       })
     );
     const asAdmin: AuthUser = { id: admin.id, role: 'Admin' };
+
+    // Baseline: what the unscoped complaint counts looked like before this
+    // script created any of its own rows.
+    const baselineTotal = await AppDataSource.getRepository(Complaint).count();
+    const baselineByStatus = await countByStatus();
 
     const createTestUser = async (name: string, email: string): Promise<User> =>
       userRepo.save(
@@ -544,9 +582,10 @@ async function main(): Promise<void> {
 
     // --- getAllComplaints: totals, filters, search, pagination (FR-23) ---
     // Final state: c1 resolved, c2 open (reworded), c3 in_progress, c4
-    // in_progress (raced), plus the long-title complaint (open, beta) = 5.
+    // in_progress (raced), plus the long-title complaint (open, beta): +5
+    // unscoped over the baseline.
     const globalPage = field<ComplaintPageShape>(await exec(GET_COMPLAINTS, {}, asAdmin), 'getAllComplaints');
-    check('the complaint list reports the global total', globalPage.total, 5);
+    checkDelta('the complaint list reports the global total', globalPage.total, baselineTotal, 5);
     check('the complaint list defaults to limit 20', globalPage.limit, 20);
 
     const alphaPage = field<ComplaintPageShape>(
@@ -588,50 +627,63 @@ async function main(): Promise<void> {
       await exec(GET_COMPLAINTS, { status: 'resolved' }, asAdmin),
       'getAllComplaints'
     );
-    check('the resolved filter counts resolved complaints', resolvedFilter.total, 1);
+    checkDelta(
+      'the resolved filter counts resolved complaints',
+      resolvedFilter.total,
+      baselineByStatus.resolved,
+      1
+    );
     const openFilter = field<ComplaintPageShape>(
       await exec(GET_COMPLAINTS, { status: 'open' }, asAdmin),
       'getAllComplaints'
     );
-    check('the open filter counts open complaints', openFilter.total, 2);
+    checkDelta('the open filter counts open complaints', openFilter.total, baselineByStatus.open, 2);
     const inProgressFilter = field<ComplaintPageShape>(
       await exec(GET_COMPLAINTS, { status: 'in_progress' }, asAdmin),
       'getAllComplaints'
     );
-    check('the in_progress filter counts in-progress complaints', inProgressFilter.total, 2);
+    checkDelta(
+      'the in_progress filter counts in-progress complaints',
+      inProgressFilter.total,
+      baselineByStatus.in_progress,
+      2
+    );
     check(
       'the resolved filter returns the resolvedAt',
       resolvedFilter.items.every((item) => item.status !== 'resolved' || (item.resolvedAt ?? null) !== null),
       true
     );
 
+    // The search terms are unique to this script's fixtures, but each search
+    // is still scoped to a test property so the expected totals stay exact
+    // regardless of what other data shares the database.
     const byTitle = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'water leak' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'water leak', pgId: alpha.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the complaint title', byTitle.total, 1);
     const byTenantName = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'rahul verma' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'rahul verma', pgId: alpha.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the tenant name case-insensitively', byTenantName.total, 2);
     const byEmail = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'phase7.rahul' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'phase7.rahul', pgId: alpha.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the linked user email', byEmail.total, 2);
     const byRoom = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'a-101' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'a-101', pgId: alpha.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the tenant room number', byRoom.total, 2);
     const byPgName = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'beta' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'beta', pgId: beta.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the PG name', byPgName.total, 2);
     const byDescription = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { search: 'kitchen window' }, asAdmin),
+      await exec(GET_COMPLAINTS, { search: 'kitchen window', pgId: beta.id }, asAdmin),
       'getAllComplaints'
     );
     check('search matches the complaint description', byDescription.total, 1);
@@ -646,10 +698,12 @@ async function main(): Promise<void> {
       'getAllComplaints'
     );
     check('the complaint list paginates items', limited.items.length, 2);
-    check('the complaint list reports the total across pages', limited.total, 5);
+    checkDelta('the complaint list reports the total across pages', limited.total, baselineTotal, 5);
     check('the complaint list echoes limit/offset', `${limited.limit}/${limited.offset}`, '2/0');
+    // The final page offset depends on the real global total, so it is
+    // derived rather than hard-coded.
     const tail = field<ComplaintPageShape>(
-      await exec(GET_COMPLAINTS, { limit: 2, offset: 4 }, asAdmin),
+      await exec(GET_COMPLAINTS, { limit: 2, offset: globalPage.total - 1 }, asAdmin),
       'getAllComplaints'
     );
     check('the complaint list returns the final partial page', tail.items.length, 1);

@@ -60,6 +60,16 @@ export interface UpdateRentPaymentInput {
   notes?: string | null;
 }
 
+/**
+ * Tenant self-service payment (tenant-portal "Pay" action). The tenant pays
+ * any amount toward one of their own payments; paidAmount accumulates until
+ * it reaches amount, at which point the payment is fully paid.
+ */
+export interface PayRentInput {
+  paymentId: string;
+  amount: number;
+}
+
 /** Query args for the paginated, filterable rent payment list. */
 export interface RentPaymentListArgs {
   search?: string | null;
@@ -129,6 +139,13 @@ function badRequest(message: string): GraphQLError {
 function notFound(message: string): GraphQLError {
   return new GraphQLError(message, {
     extensions: { code: 'NOT_FOUND', http: { status: 404 } }
+  });
+}
+
+/** Ownership violation (a tenant may only pay their own rent payments). */
+function forbidden(message: string): GraphQLError {
+  return new GraphQLError(message, {
+    extensions: { code: 'FORBIDDEN', http: { status: 403 } }
   });
 }
 
@@ -301,6 +318,9 @@ async function lockPayment(manager: EntityManager, id: string): Promise<RentPaym
     .getRepository(RentPayment)
     .createQueryBuilder('payment')
     .leftJoinAndSelect('payment.tenant', 'tenant')
+    // tenant.user is read-only reference data for the tenant self-service
+    // payment ownership check (the row lock stays on the payment only).
+    .leftJoinAndSelect('tenant.user', 'user')
     .setLock('pessimistic_write', undefined, ['payment'])
     .where('payment.id = :id', { id })
     .getOne();
@@ -396,6 +416,57 @@ export async function updateRentPayment(id: string, input: UpdateRentPaymentInpu
     if (notes !== undefined) {
       payment.notes = notes;
     }
+
+    const saved = await manager.getRepository(RentPayment).save(payment);
+    // Re-attach the live tenant in case save() returned a relation clone.
+    saved.tenant = payment.tenant;
+    return saved;
+  });
+}
+
+/**
+ * Tenant self-service payment (FR-20 extension): adds to the amount already
+ * paid on one of the caller's own rent payments. The pay amount may be any
+ * part of the remaining rent — paidAmount accumulates until it reaches
+ * amount, at which point the payment becomes fully paid. Status and paidDate
+ * are re-derived exactly as on every other write, and the same row lock as
+ * updateRentPayment serializes concurrent payments on one record.
+ */
+export async function payRent(userId: string, input: PayRentInput): Promise<RentPayment> {
+  const payAmount = validateInt(input.amount, AMOUNT_MIN, AMOUNT_MAX, 'Payment amount');
+  const paymentId = typeof input.paymentId === 'string' ? input.paymentId.trim() : '';
+  if (paymentId.length === 0) {
+    throw badRequest('A payment id is required');
+  }
+
+  return AppDataSource.transaction(async (manager) => {
+    const payment = await lockPayment(manager, paymentId);
+
+    // Ownership: a tenant can only pay their own rent payments.
+    if (payment.tenant.user.id !== userId) {
+      throw forbidden('You can only pay your own rent payments');
+    }
+
+    const remaining = payment.amount - payment.paidAmount;
+    if (remaining <= 0) {
+      throw badRequest('This payment is already fully paid');
+    }
+    if (payAmount > remaining) {
+      throw badRequest(`Payment amount cannot exceed the remaining rent of ${remaining}`);
+    }
+
+    const nextPaidAmount = payment.paidAmount + payAmount;
+    const state = resolveWriteState(
+      payment.amount,
+      nextPaidAmount,
+      payment.dueDate,
+      null,
+      payment.paidDate ?? null
+    );
+
+    payment.paidAmount = nextPaidAmount;
+    payment.status = state.status;
+    payment.paidDate = state.paidDate;
 
     const saved = await manager.getRepository(RentPayment).save(payment);
     // Re-attach the live tenant in case save() returned a relation clone.
@@ -548,6 +619,18 @@ const STATUS_PREDICATES: Record<PaymentStatus, string> = {
   [PaymentStatus.Partial]: `payment."paidAmount" > 0 AND payment."paidAmount" < payment."amount" AND payment."dueDate" >= ${SQL_TODAY}`,
   [PaymentStatus.Pending]: `payment."paidAmount" = 0 AND payment."paidAmount" < payment."amount" AND payment."dueDate" >= ${SQL_TODAY}`
 };
+
+/**
+ * Read-only access to the status predicates above, for other services that
+ * aggregate payment statuses (the Phase 10 dashboard). They are SQL
+ * expressions rooted at the `payment` alias, so a caller reusing them must
+ * query through the RentPayment repository with the `payment` alias.
+ * Exported rather than duplicated so the derivation rule has exactly one
+ * definition.
+ */
+export function paymentStatusPredicates(): Record<PaymentStatus, string> {
+  return STATUS_PREDICATES;
+}
 
 /** Postgres returns COUNT/SUM results as strings (bigint); parse defensively. */
 interface RentSummaryRaw {

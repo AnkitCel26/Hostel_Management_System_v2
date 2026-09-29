@@ -17,6 +17,7 @@
     "@hookform/resolvers": "^4.0.0",
     "@mui/icons-material": "^6.3.0",
     "@mui/material": "^6.3.0",
+    "@mui/x-charts": "^7.29.1",
     "@supabase/supabase-js": "^2.117.2",
     "graphql": "^16.9.0",
     "react": "^19.0.0",

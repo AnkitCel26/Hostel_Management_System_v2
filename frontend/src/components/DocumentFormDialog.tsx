@@ -95,6 +95,12 @@ export function DocumentFormDialog({
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [serverError, setServerError] = React.useState<string | null>(null);
 
+  // Storage is only needed when a file is written: a create always uploads,
+  // and an update only uploads when the file is being replaced. Renaming or
+  // renumbering an existing record is pure metadata and must stay possible
+  // while storage is not configured.
+  const needsStorage = !isEdit || file !== null;
+
   // No refetchQueries: the parent refetches its own query in onSaved, and
   // returned TenantDocument entities merge into the Apollo cache by id.
   const [uploadTenantDocs] = useMutation(UPLOAD_TENANT_DOCS_MUTATION);
@@ -236,7 +242,7 @@ export function DocumentFormDialog({
               </Alert>
             ) : null}
 
-            {!storageReady ? (
+            {!storageReady && needsStorage ? (
               <Alert severity="warning">
                 Document storage is not configured for this deployment. Ask your administrator to
                 set up the Supabase connection before uploading files.
@@ -344,7 +350,7 @@ export function DocumentFormDialog({
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !storageReady}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || (needsStorage && !storageReady)}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Upload document'}
           </Button>
         </DialogActions>

@@ -17,6 +17,7 @@ import {
 import * as authService from './services/auth.service';
 import * as announcementService from './services/announcement.service';
 import * as complaintService from './services/complaint.service';
+import * as dashboardService from './services/dashboard.service';
 import * as documentService from './services/document.service';
 import * as paymentService from './services/payment.service';
 import * as pgService from './services/pg.service';
@@ -170,6 +171,19 @@ export const resolvers = {
       // tenantId is accepted from input (FR-28 role boundary).
       const user = requireTenant(ctx);
       return documentService.getTenantDocuments(user.id, args);
+    },
+
+    getAdminDashboardStats: (
+      _parent: unknown,
+      args: { pgId?: string | null; recentLimit?: number | null },
+      ctx: GraphQLContext
+    ) => {
+      requireAdmin(ctx);
+      // The service aggregates and validates; the resolver only authorizes.
+      return dashboardService.getAdminDashboardStats(
+        { pgId: args.pgId ?? null },
+        { limit: args.recentLimit ?? null }
+      );
     }
   },
 
@@ -271,6 +285,17 @@ export const resolvers = {
     ) => {
       requireAdmin(ctx);
       return paymentService.updateRentPayment(args.id, args.input);
+    },
+
+    payRent: (
+      _parent: unknown,
+      args: { input: paymentService.PayRentInput },
+      ctx: GraphQLContext
+    ) => {
+      // Ownership of the payment is verified inside the service (the
+      // tenant's own record is the only one payable).
+      const user = requireTenant(ctx);
+      return paymentService.payRent(user.id, args.input);
     },
 
     createComplaint: (

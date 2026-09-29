@@ -369,7 +369,13 @@ export function AdminPaymentsPage() {
                         {formatCurrency(payment.amount)}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {payment.paidAmount > 0 ? `${formatCurrency(payment.paidAmount)} paid` : 'unpaid'}
+                        {payment.paidAmount > 0
+                          ? payment.paidAmount < payment.amount
+                            ? `${formatCurrency(payment.paidAmount)} paid · ${formatCurrency(
+                                payment.amount - payment.paidAmount
+                              )} remaining`
+                            : `${formatCurrency(payment.paidAmount)} paid in full`
+                          : 'unpaid'}
                       </Typography>
                     </TableCell>
                     <TableCell>
