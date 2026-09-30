@@ -1,11 +1,3 @@
-/**
- * Phase 4 verification: exercises PG and room management through the real
- * GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization, validation, search/pagination, occupancy invariants, and
- * the tenant-facing PG/room query. Creates throwaway data and cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase4.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -228,7 +220,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // Throwaway users (auth flows are Phase 3 and already verified).
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -249,7 +240,6 @@ async function main(): Promise<void> {
     const asAdmin: AuthUser = { id: admin.id, role: 'Admin' };
     const asTenant: AuthUser = { id: tenantUser.id, role: 'Tenant' };
 
-    // --- authorization (FR-33, §16: both roles guarded at the resolver) ---
     expectError(
       'guest cannot create a PG',
       await exec(CREATE_PG, {
@@ -269,7 +259,6 @@ async function main(): Promise<void> {
     expectError('tenant cannot list PGs', await exec(GET_ALL_PGS, {}, asTenant), 'FORBIDDEN');
     expectError('guest cannot list rooms', await exec(GET_ALL_ROOMS, {}), 'FORBIDDEN');
 
-    // --- PG create / validation ---
     expectError(
       'createPg rejects a short name',
       await exec(CREATE_PG, { input: { name: 'x', address: '1 Short Street' } }, asAdmin),
@@ -306,7 +295,6 @@ async function main(): Promise<void> {
     check('createPg trims the address', createdPg.address, '12 Phase Four Street');
     check('createPg serializes createdAt as a string', typeof createdPg.createdAt, 'string');
 
-    // --- PG update ---
     expectError(
       'updatePg rejects an unknown id',
       await exec(UPDATE_PG, { id: NONEXISTENT_ID, input: { name: 'Nope' } }, asAdmin),
@@ -326,7 +314,6 @@ async function main(): Promise<void> {
     const allPgs = field<PgShape[]>(await exec(GET_ALL_PGS, {}, asAdmin), 'getAllPgs');
     check('getAllPgs lists the PG newest first', allPgs[0]?.id, pgId);
 
-    // --- room create / validation / PG link (FR-09, FR-11) ---
     const createdRoom = field<RoomShape>(
       await exec(
         CREATE_ROOM,
@@ -393,7 +380,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // The same room number is fine in a different PG.
     const secondPg = field<PgShape>(
       await exec(
         CREATE_PG,
@@ -420,7 +406,6 @@ async function main(): Promise<void> {
       'V-101'
     );
 
-    // --- room update (FR-10) ---
     expectError(
       'updateRoom rejects an unknown id',
       await exec(UPDATE_ROOM, { id: NONEXISTENT_ID, input: { rent: 6000 } }, asAdmin),
@@ -455,9 +440,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- occupancy invariant (FR-11): capacity cannot drop below occupancy ---
-    // Simulate a Phase 5 assignment state directly, since assignment flows
-    // themselves are Phase 5.
     const roomRepo = AppDataSource.getRepository(Room);
     const busyRoom = await roomRepo.findOne({ where: { id: otherRoom.id } });
     if (!busyRoom) throw new Error('Test room not found for the occupancy check');
@@ -475,7 +457,6 @@ async function main(): Promise<void> {
     );
     check('updateRoom allows capacity at or above occupancy', widenedRoom.capacity, 4);
 
-    // --- search + pagination (FR-12) ---
     let firstBatchRoomId: string | null = null;
     for (let i = 1; i <= 25; i += 1) {
       const roomNumber = `R-${String(i).padStart(2, '0')}`;
@@ -491,7 +472,6 @@ async function main(): Promise<void> {
         firstBatchRoomId = created.id;
       }
     }
-    // secondPg now holds: V-101, R-01..R-25 => 26 rooms.
     const firstPage = field<RoomPageShape>(
       await exec(GET_ALL_ROOMS, { pgId: secondPg.id, limit: 10, offset: 0 }, asAdmin),
       'getAllRooms'
@@ -523,8 +503,6 @@ async function main(): Promise<void> {
     );
     check('getAllRooms search can return an empty page', searchMiss.items.length, 0);
 
-    // Give one batch room a type (updateRoom also covers setting roomType),
-    // then confirm the search matches it.
     if (!firstBatchRoomId) throw new Error('Batch room id was not captured');
     await exec(
       UPDATE_ROOM,
@@ -563,7 +541,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- nested resolution through the relation field resolvers ---
     const pgsWithRooms = field<PgShape[]>(
       await exec(GET_ALL_PGS_ROOMS, {}, asAdmin),
       'getAllPgsRooms'
@@ -577,7 +554,6 @@ async function main(): Promise<void> {
     );
     check('nested room resolves its PG', nestedRoom?.pg?.name, 'Phase4 Verify PG Updated');
 
-    // --- tenant-facing query (FR-17) ---
     expectError(
       'getTenantPgRoom requires the Tenant role',
       await exec(GET_TENANT_PG_ROOM, {}, asAdmin),
@@ -590,7 +566,6 @@ async function main(): Promise<void> {
       null
     );
 
-    // Assignment flows are Phase 5; create the tenant record directly.
     const tenantRepo = AppDataSource.getRepository(Tenant);
     const pgEntity = await AppDataSource.getRepository(Pg).findOne({ where: { id: pgId } });
     const roomEntity = await roomRepo.findOne({ where: { id: roomId } });
@@ -612,7 +587,6 @@ async function main(): Promise<void> {
     check('getTenantPgRoom returns the assigned PG', assignment.pg.id, pgId);
     check('getTenantPgRoom returns the assigned room', assignment.room.id, roomId);
 
-    // Deep nested resolution: room -> tenants -> user/pg through field resolvers.
     const deepRooms = field<{ items: DeepRoomShape[] }>(
       await exec(GET_ALL_ROOMS_DEEP, { search: 'V-101', pgId }, asAdmin),
       'getAllRooms'

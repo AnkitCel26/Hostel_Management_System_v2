@@ -49,7 +49,6 @@ function unauthenticated(message = 'Authentication required'): GraphQLError {
 function authCookieOptions(maxAgeSeconds: number) {
   return {
     httpOnly: true,
-    // localhost:5173 -> localhost:4001 is same-site (ports are not part of a
     // site), so 'lax' works in dev. Production should serve app + API on one
     // domain, or this must become 'none' with secure cookies.
     sameSite: 'lax' as const,
@@ -85,7 +84,6 @@ function clearAuthCookies(res: Response): void {
 
 let dummyHash: string | null = null;
 
-/** Compares against a dummy hash so unknown emails take the same time as wrong passwords. */
 async function equalizeLoginTiming(password: string): Promise<boolean> {
   dummyHash ??= await hashPassword('timing-equalizer-placeholder');
   return verifyPassword(password, dummyHash);
@@ -117,7 +115,6 @@ export async function registerUser(input: RegisterInput, res: Response): Promise
       name: input.name.trim(),
       email,
       password: await hashPassword(input.password),
-      // Registration is for tenants only — the role is never accepted from input.
       role: UserRole.Tenant
     })
   );
@@ -130,7 +127,6 @@ export async function loginUser(input: LoginInput, res: Response): Promise<User>
   const email = (input.email ?? '').trim().toLowerCase();
   const password = input.password ?? '';
 
-  // Password column is select:false, so select it explicitly for the check.
   const user = await userRepo()
     .createQueryBuilder('user')
     .addSelect('user.password')
@@ -170,14 +166,13 @@ export async function refreshUserSession(req: Request, res: Response): Promise<U
     throw unauthenticated('Refresh token is invalid or expired');
   }
 
-  // Re-load the user: tokens may outlive a deleted/deactivated account.
   const user = await userRepo().findOne({ where: { id: payload.sub } });
   if (!user) {
     clearAuthCookies(res);
     throw unauthenticated('Account no longer exists');
   }
 
-  setAuthCookies(res, user); // rotate both tokens
+  setAuthCookies(res, user);
   return user;
 }
 
@@ -213,7 +208,6 @@ export async function updateProfile(
   return userRepo().save(user);
 }
 
-/** Admin-only (enforced by the resolver guard). */
 export async function getAllUsers(): Promise<User[]> {
   return userRepo().find({ order: { createdAt: 'DESC' } });
 }

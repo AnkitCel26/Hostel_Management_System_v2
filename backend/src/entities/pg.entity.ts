@@ -45,11 +45,9 @@ export class Pg {
   @OneToMany(() => Tenant, (tenant) => tenant.pg)
   tenants?: Tenant[];
 
-  // Pg 1 ─ * Complaint
   @OneToMany(() => Complaint, (complaint) => complaint.pg)
   complaints?: Complaint[];
 
-  // Pg 1 ─ * Announcement
   @OneToMany(() => Announcement, (announcement) => announcement.pg)
   announcements?: Announcement[];
 }

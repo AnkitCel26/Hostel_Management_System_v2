@@ -76,20 +76,12 @@ interface GetTenantAnnouncementsData {
   getTenantPgAnnouncements: AnnouncementPage;
 }
 
-/** How many rows each dashboard feed requests. */
 const FEED_SIZE = 5;
 
-/**
- * One spacing rhythm for the whole page. Every grid and every stack gap uses
- * this value, so the vertical lines of the stat row, the two panel rows, and
- * the quick-action row all line up instead of drifting apart.
- */
 const GAP = 3;
 
-/** The colour roles a status panel or stat tile can take. */
 type RentTone = 'primary' | 'success' | 'info' | 'warning' | 'error';
 
-/** Tinted icon badge — the homepage / StatCard visual language. */
 const iconBadgeSx = {
   width: 40,
   height: 40,
@@ -102,7 +94,6 @@ const iconBadgeSx = {
   bgcolor: (theme: Theme) => alpha(theme.palette.primary.main, 0.1)
 } as const;
 
-/** Tinted icon badge in an explicit tone colour (status panels). */
 const toneBadgeSx = (tone: RentTone) => ({
   width: 44,
   height: 44,
@@ -115,7 +106,6 @@ const toneBadgeSx = (tone: RentTone) => ({
   bgcolor: (theme: Theme) => alpha(theme.palette[tone].main, 0.12)
 });
 
-/** The payment that decides the tenant's headline payment status. */
 function headlinePayment(payments: RentPayment[]): RentPayment | null {
   if (payments.length === 0) {
     return null;
@@ -129,11 +119,6 @@ function headlinePayment(payments: RentPayment[]): RentPayment | null {
   );
 }
 
-/**
- * Status colour and icon per payment status. The "none" pseudo-status is a
- * tenant who has no rent record yet, so the panel reads as informational
- * rather than alarming.
- */
 const RENT_TONE: Record<'none' | RentPayment['status'], RentTone> = {
   none: 'primary',
   paid: 'success',
@@ -142,7 +127,6 @@ const RENT_TONE: Record<'none' | RentPayment['status'], RentTone> = {
   overdue: 'error'
 };
 
-/** Status word shown in the big-value column of the stat row. */
 const RENT_STATUS_WORD: Record<'none' | RentPayment['status'], string> = {
   none: '—',
   paid: 'Paid',
@@ -165,12 +149,6 @@ interface RentStatusPanelProps {
   onPay: (payment: RentPayment) => void;
 }
 
-/**
- * Rent status panel — the one thing a tenant opens this page for. Replaces a
- * bare alert with the same panel language the admin dashboard uses for its
- * collection summary: tinted status badge, one headline line, a progress bar
- * for the current cycle, and the billed / paid / outstanding figures.
- */
 function RentStatusPanel({ current, monthlyRent, onPay }: RentStatusPanelProps) {
   const status = current?.status ?? 'none';
   const tone = RENT_TONE[status];
@@ -307,7 +285,6 @@ function RentStatusPanel({ current, monthlyRent, onPay }: RentStatusPanelProps) 
   );
 }
 
-/** Clamp helper: cap a block at `lines` and hide the rest. */
 function clampLines(lines: number) {
   return {
     display: '-webkit-box',
@@ -317,7 +294,6 @@ function clampLines(lines: number) {
   };
 }
 
-/** Single-line ellipsis for text that must not change a row's height. */
 const singleLineSx = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -325,26 +301,14 @@ const singleLineSx = {
 } as const;
 
 interface FeedRowProps {
-  /** Route the whole row navigates to. */
   to: string;
   title: string;
-  /** Small muted line under the title: a date, an amount paid, or a preview. */
   meta: React.ReactNode;
-  /** Status chip or date, right-aligned. */
   trailing?: React.ReactNode;
-  /** Lines the title may occupy before it is clamped. */
   titleLines?: 1 | 2;
-  /** Lines the meta preview may occupy before it is clamped. */
   metaLines?: 1 | 2;
 }
 
-/**
- * One row in a dashboard feed. Payments, complaints, and announcements all use
- * this same anatomy — a text column on the left, a status or date on the
- * right, and a minimum height — so the three panels read as one table-like
- * system rather than three differently spaced lists. The row is one link, so
- * the whole strip is a single, keyboard-accessible target.
- */
 function FeedRow({
   to,
   title,
@@ -411,7 +375,6 @@ interface QuickLink {
   icon: React.ReactNode;
 }
 
-/** The tenant's own modules, one click from the dashboard. */
 const QUICK_LINKS: QuickLink[] = [
   {
     to: '/tenant/payments',
@@ -433,7 +396,6 @@ const QUICK_LINKS: QuickLink[] = [
   }
 ];
 
-/** Friendly occupancy note derived from the room's live bed counts. */
 function sharingNote(room: Room): string {
   if (room.occupiedCount >= room.capacity) {
     return 'This room is currently at full capacity.';
@@ -445,19 +407,6 @@ function sharingNote(room: Room): string {
   return 'You have this room to yourself.';
 }
 
-/**
- * Tenant dashboard (FR-32, design system §6).
- *
- * Every query used here is already scoped to the calling tenant on the server,
- * so the page needs no tenant-specific dashboard endpoint. It answers four
- * questions in order: what rent do I owe, where do I live, is anything broken,
- * and what is my property team telling me.
- *
- * Layout: every row on the page is a grid using the same `GAP`, so the column
- * edges of the stat row, the two panel rows, and the quick-action row line up
- * down the page. Cards in a row stretch to the tallest card rather than being
- * sized by their own content, so the row reads as one band.
- */
 export function TenantDashboardPage() {
   const { user } = useAuth();
   const { success } = useSnackbar();
@@ -494,17 +443,11 @@ export function TenantDashboardPage() {
   );
   const outstanding = current === null ? 0 : Math.max(current.amount - current.paidAmount, 0);
 
-  // Any feed failing is a partial failure: the rest of the page is still
-  // useful, so per-panel errors are rendered inside their own panel. Only a
-  // failure of the two feeds the whole page depends on (the assignment and
-  // the payments) replaces the page with a retry state.
   const criticalError = paymentsQuery.error ?? assignmentQuery.error;
   const criticalLoading = assignmentQuery.loading || paymentsQuery.loading;
   const hasCriticalData =
     assignmentQuery.data !== undefined || paymentsQuery.data !== undefined;
 
-  // A quiet refresh strip: the non-critical feeds settle in the background and
-  // must not block the panels that already have data.
   const backgroundLoading = complaintsQuery.loading || announcementsQuery.loading;
   const anyLoading = criticalLoading || backgroundLoading;
 
@@ -542,8 +485,6 @@ export function TenantDashboardPage() {
     );
   }
 
-  // Nothing has arrived yet and nothing has failed: show the full-page
-  // loading state rather than flashing an empty dashboard.
   if (criticalLoading && !hasCriticalData) {
     return (
       <Box>
@@ -610,8 +551,6 @@ export function TenantDashboardPage() {
         }
       />
 
-      {/* Thin progress strip while a background refresh is in flight, matching
-          the management pages' pattern. */}
       {backgroundLoading && hasCriticalData ? (
         <LinearProgress
           aria-label="Refreshing your dashboard"
@@ -625,9 +564,6 @@ export function TenantDashboardPage() {
         />
       ) : null}
 
-      {/* No room yet: the panels that depend on an assignment would all be
-          empty, so the page leads with the one thing the tenant has to do
-          next — the rest of the portal stays reachable below. */}
       {room === null ? (
         <>
           <Card>
@@ -641,7 +577,6 @@ export function TenantDashboardPage() {
         </>
       ) : (
         <>
-          {/* Headline cards (design system §6 tenant dashboard cards). */}
           <Box
             sx={{
               display: 'grid',
@@ -668,8 +603,6 @@ export function TenantDashboardPage() {
               tone="secondary"
             />
             <StatCard
-              // The icon follows the same status → tone mapping as the panel
-              // below, so a glance at the row already says which state it is.
               icon={RENT_TONE_ICON[RENT_TONE[current?.status ?? 'none']]}
               label="Payment status"
               value={RENT_STATUS_WORD[current?.status ?? 'none']}
@@ -707,7 +640,6 @@ export function TenantDashboardPage() {
             />
           </Box>
 
-          {/* Rent status: the one panel a tenant comes here for. */}
           <Box sx={{ mb: GAP }}>
             <RentStatusPanel current={current} monthlyRent={room.rent} onPay={openPay} />
           </Box>
@@ -720,7 +652,6 @@ export function TenantDashboardPage() {
               mb: GAP
             }}
           >
-            {/* Room detail. */}
             <DashboardSection
               title="My room"
               subtitle={pg ? `${pg.name}${pg.city ? `, ${pg.city}` : ''}` : 'Your current room'}
@@ -735,8 +666,6 @@ export function TenantDashboardPage() {
                 </Button>
               }
             >
-              {/* Grows with the panel so the sharing note is pinned to the
-                  bottom when the announcements panel next to it is taller. */}
               <Stack spacing={2.5} sx={{ flexGrow: 1 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <Box sx={iconBadgeSx}>
@@ -799,7 +728,6 @@ export function TenantDashboardPage() {
               </Stack>
             </DashboardSection>
 
-            {/* Announcements, newest first. */}
             <DashboardSection
               title="Announcements"
               subtitle={pg ? `From ${pg.name}` : 'Latest from your property'}
@@ -845,7 +773,6 @@ export function TenantDashboardPage() {
             </DashboardSection>
           </Box>
 
-          {/* Recent activity: payments and complaints. */}
           <Box
             sx={{
               display: 'grid',
@@ -948,7 +875,6 @@ export function TenantDashboardPage() {
             </DashboardSection>
           </Box>
 
-          {/* Shortcuts into the rest of the tenant portal. */}
           {quickActions}
         </>
       )}

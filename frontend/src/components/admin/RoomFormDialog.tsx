@@ -61,27 +61,16 @@ type RoomFormData = z.infer<typeof roomSchema>;
 
 interface RoomFormDialogProps {
   open: boolean;
-  /** The room being edited, or null to create a new one. */
   room: Room | null;
-  /** PGs available for selection when creating a room. */
   pgs: Pg[];
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/**
- * Create/edit dialog for rooms (FR-09, FR-10). Rooms are always created under
- * a PG and cannot be moved between PGs, so the PG selector is only editable in
- * create mode. Occupancy is system-managed (FR-11) and is never editable here.
- */
 export function RoomFormDialog({ open, room, pgs, onClose, onSaved }: RoomFormDialogProps) {
   const isEdit = room !== null;
   const [serverError, setServerError] = React.useState<string | null>(null);
 
-  // Apollo's cache updates Room entities by id, but it cannot insert a newly
-  // created room into the cached Pg.rooms list of getAllPgsRooms — refetch it
-  // so the Property Management page and the sidebar occupancy card stay fresh.
   const [createRoom] = useMutation(CREATE_ROOM_MUTATION, {
     refetchQueries: [{ query: GET_ALL_PGS_ROOMS_QUERY }]
   });
@@ -99,7 +88,6 @@ export function RoomFormDialog({ open, room, pgs, onClose, onSaved }: RoomFormDi
     defaultValues: { pgId: '', roomNumber: '', roomType: '', capacity: 1, rent: 0 }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -119,8 +107,6 @@ export function RoomFormDialog({ open, room, pgs, onClose, onSaved }: RoomFormDi
     const floor = typeof data.floor === 'number' && !Number.isNaN(data.floor) ? data.floor : undefined;
     try {
       if (isEdit) {
-        // Rooms cannot be moved between PGs: pgId is never sent on update.
-        // roomType '' clears the value; floor omitted leaves it unchanged.
         await updateRoom({
           variables: {
             id: room.id,

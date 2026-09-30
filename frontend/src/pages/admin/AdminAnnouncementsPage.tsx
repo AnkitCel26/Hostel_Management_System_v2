@@ -50,7 +50,6 @@ interface GetAllPgsData {
   getAllPgs: Pg[];
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -63,7 +62,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the rooms, tenants, and payments pages. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -71,7 +69,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/** Long messages collapse to two lines; the full text stays in the title attribute. */
 const contentSx = {
   display: '-webkit-box',
   WebkitLineClamp: 2,
@@ -79,12 +76,6 @@ const contentSx = {
   overflow: 'hidden'
 } as const;
 
-/**
- * Admin announcements page (/admin/announcements): the searchable, filterable
- * list of every property announcement with publish and edit actions
- * (FR-25 create, FR-26 update). Deleting announcements is not part of the MRD,
- * so this page only publishes and edits.
- */
 export function AdminAnnouncementsPage() {
   const [searchParams] = useSearchParams();
   const { success } = useSnackbar();
@@ -100,7 +91,6 @@ export function AdminAnnouncementsPage() {
     announcement: null
   });
 
-  // Filters returning to their default values restart pagination.
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, pgFilter]);
@@ -139,7 +129,6 @@ export function AdminAnnouncementsPage() {
     const wasCreate = dialog.announcement === null;
     closeDialog();
     success(message);
-    // A new announcement is the newest item, so return to the first page.
     if (wasCreate) setPage(0);
     void refetch();
   };
@@ -175,7 +164,6 @@ export function AdminAnnouncementsPage() {
         </Box>
       ) : null}
 
-      {/* Toolbar */}
       <Card sx={{ mb: 3 }}>
         <CardContent
           sx={{

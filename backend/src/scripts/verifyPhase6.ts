@@ -1,15 +1,3 @@
-/**
- * Phase 6 verification: exercises rent and payment management through the
- * real GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization, input validation, status derivation (pending/partial/paid/
- * overdue, including the live-status rule where a stored status goes stale),
- * paidDate system-management, searchable/filterable/paginated payment
- * listing, tenant-scoped history, admin summary math, admin history, nested
- * resolution, concurrent updates of one payment, and a write-invariant
- * integrity sweep. Creates throwaway data and cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase6.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -186,7 +174,6 @@ const GET_TENANTS_PAYMENTS = `
     }
   }`;
 
-/** Calendar date offset from today (UTC), as YYYY-MM-DD. */
 function isoDate(offsetDays: number): string {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + offsetDays);
@@ -200,12 +187,6 @@ function check(label: string, actual: unknown, expected: unknown): void {
   console.log(`PASS: ${label}`);
 }
 
-/**
- * These tests share the database with the app's other data (e.g. the demo
- * seed), so an unscoped count is only meaningful as a change from a baseline
- * taken before this script creates its fixtures. The scoped assertions (by
- * pgId, tenantId, or search) are unaffected and stay absolute.
- */
 function checkDelta(label: string, after: number, before: number, added: number): void {
   check(`${label} (+${added})`, after - before, added);
 }
@@ -232,7 +213,6 @@ function expectError(label: string, result: GqlResult, code: string): void {
   console.log(`PASS: ${label}`);
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanupTestData(): Promise<void> {
   const userRepo = AppDataSource.getRepository(User);
   const tenantRepo = AppDataSource.getRepository(Tenant);
@@ -248,7 +228,6 @@ async function cleanupTestData(): Promise<void> {
       where: users.map((user) => ({ user: { id: user.id } }))
     });
     if (tenants.length > 0) {
-      // Payments reference tenants — delete them before their tenants.
       await paymentRepo
         .createQueryBuilder()
         .delete()
@@ -304,7 +283,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // --- throwaway users (auth flows are Phase 3 and already verified) ---
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -339,7 +317,6 @@ async function main(): Promise<void> {
     const baseline = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
     const baselineTotal = baseline.totalPayments;
 
-    // --- PGs, a room, and tenants (Phase 4/5 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
       field<PgShape>(
         await exec(CREATE_PG, { input: { name, address: `${name} address` } }, asAdmin),
@@ -381,7 +358,6 @@ async function main(): Promise<void> {
         'createRentPayment'
       );
 
-    // --- authorization (FR-33: both roles guarded at the resolver) ---
     expectError('guest cannot list payments', await exec(GET_PAYMENTS, {}), 'FORBIDDEN');
     expectError('guest cannot read the summary', await exec(GET_SUMMARY, {}), 'FORBIDDEN');
     expectError('guest cannot read the admin history', await exec(GET_ADMIN_HISTORY, {}), 'FORBIDDEN');
@@ -425,7 +401,6 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- createRentPayment validation (FR-18) ---
     expectError(
       'createRentPayment rejects an unknown tenant',
       await exec(
@@ -504,7 +479,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- createRentPayment + status derivation (FR-18, MRD §16) ---
     const p1 = await createPayment({
       tenantId: rahul.id,
       amount: 10000,
@@ -543,9 +517,6 @@ async function main(): Promise<void> {
     check('a fully paid payment respects an explicit paid date', p6.paidDate, RECENT);
     check('a fully paid past-due payment is still paid', p6.status, 'paid');
 
-    // --- the live status rule: a stale stored status reads as the truth ---
-    // Inserted directly through the repository (bypassing the service's
-    // derivation) with a stale "pending" stored value and a past due date.
     const paymentRepo = AppDataSource.getRepository(RentPayment);
     await paymentRepo.save(
       paymentRepo.create({
@@ -566,10 +537,6 @@ async function main(): Promise<void> {
     if (!staleRow) throw new Error('FAIL the stale inserted payment was not listed');
     check('a stale stored pending reads as live overdue', staleRow.status, 'overdue');
 
-    // --- getAllRentPayments: pagination, search, filters (FR-21) ---
-    // Created so far: p1 (rahul pending), p2 (rahul partial), p3 (priya paid),
-    // p4 (priya overdue), p5 (cross pending), p6 (rahul paid), stale (rahul
-    // live-overdue). Alpha = 6 payments, beta = 1, +7 unscoped.
     const globalPage = field<PaymentPageShape>(await exec(GET_PAYMENTS, {}, asAdmin), 'getAllRentPayments');
     checkDelta('the payment list reports the global total', globalPage.total, baselineTotal, 7);
     check('the payment list defaults to limit 20', globalPage.limit, 20);
@@ -624,9 +591,6 @@ async function main(): Promise<void> {
     );
     checkDelta('the partial filter counts partial payments', partialFilter.total, baseline.partialCount, 1);
 
-    // The search terms below are unique to this script's fixtures, but the
-    // count is scoped to alpha anyway so the expected totals stay exact
-    // regardless of what other data shares the database.
     const byName = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { search: 'rahul verma', pgId: alpha.id }, asAdmin),
       'getAllRentPayments'
@@ -660,8 +624,6 @@ async function main(): Promise<void> {
     check('the payment list paginates items', limited.items.length, 3);
     checkDelta('the payment list reports the total across pages', limited.total, baselineTotal, 7);
     check('the payment list echoes limit/offset', `${limited.limit}/${limited.offset}`, '3/0');
-    // The final page offset depends on the real global total, so it is
-    // derived rather than hard-coded.
     const tailOffset = globalPage.total - 1;
     const tail = field<PaymentPageShape>(
       await exec(GET_PAYMENTS, { limit: 3, offset: tailOffset }, asAdmin),
@@ -695,7 +657,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- nested resolution through the relation field resolvers ---
     const deep = field<{ items: DeepPaymentShape[] }>(
       await exec(GET_PAYMENTS_DEEP, { search: 'backdated' }, asAdmin),
       'getAllRentPayments'
@@ -715,10 +676,6 @@ async function main(): Promise<void> {
     if (!priyaPayments) throw new Error('Tenant.payments did not resolve for Priya');
     check('Tenant.payments resolves the tenant own payments', priyaPayments.length, 2);
 
-    // --- getAdminRentSummary (FR-21) ---
-    // Global: 7 payments, billed 49000, collected 18000 (3000 + 6000 + 9000),
-    // outstanding 31000; pending 2 (p1, p5), partial 1 (p2), paid 2 (p3, p6),
-    // overdue 2 (p4, stale-live).
     const globalSummary = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
     checkDelta('the summary counts all payments', globalSummary.totalPayments, baseline.totalPayments, 7);
     checkDelta('the summary sums the billed amounts', globalSummary.totalBilled, baseline.totalBilled, 49000);
@@ -756,7 +713,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- getRentPaymentHistory: tenant-scoped (FR-20, FR-23) ---
     const rahulHistory = field<PaymentPageShape>(
       await exec(GET_TENANT_HISTORY, {}, asTenant(rahulUser)),
       'getRentPaymentHistory'
@@ -796,7 +752,6 @@ async function main(): Promise<void> {
     check('a user without a tenant record gets an empty page', roomlessHistory.total, 0);
     check('the empty history page has no items', roomlessHistory.items.length, 0);
 
-    // --- updateRentPayment (FR-19) ---
     expectError(
       'updateRentPayment rejects an unknown id',
       await exec(UPDATE_PAYMENT, { id: NONEXISTENT_ID, input: { paidAmount: 100 } }, asAdmin),
@@ -882,8 +837,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- concurrent updates of one payment serialize (row lock) ---
-    // Two disjoint-field updates racing: both must land, with no lost update.
     const [racedPaid, racedNotes] = await Promise.all([
       exec(UPDATE_PAYMENT, { id: p5.id, input: { paidAmount: 7000 } }, asAdmin),
       exec(UPDATE_PAYMENT, { id: p5.id, input: { notes: 'raced note' } }, asAdmin)
@@ -915,10 +868,6 @@ async function main(): Promise<void> {
     check('an update respects an explicit paid date', explicitPaidDate.paidDate, isoDate(-3));
     check('the fully paid update stores the paid status', explicitPaidDate.status, 'paid');
 
-    // --- post-update summary re-check (list and summary stay consistent) ---
-    // Final alpha state: p1 5000/5000 paid, p2 8000/8000 paid, p3 6000/6000
-    // paid, p4 5000/0 pending, p6 9000/9000 paid, stale 4000/0 overdue.
-    // Beta: p5 7000/7000 paid.
     const finalGlobal = field<SummaryShape>(await exec(GET_SUMMARY, {}, asAdmin), 'getAdminRentSummary');
     checkDelta('the final summary counts all payments', finalGlobal.totalPayments, baseline.totalPayments, 7);
     checkDelta('the final summary sums billed', finalGlobal.totalBilled, baseline.totalBilled, 44000);
@@ -930,8 +879,6 @@ async function main(): Promise<void> {
       9000
     );
     checkDelta('the final summary counts pending', finalGlobal.pendingCount, baseline.pendingCount, 1);
-    // The fixtures end with no partial payments, so the global count returns
-    // to whatever the baseline had.
     check('the final summary counts partial', finalGlobal.partialCount, baseline.partialCount);
     checkDelta('the final summary counts paid', finalGlobal.paidCount, baseline.paidCount, 5);
     checkDelta('the final summary counts overdue', finalGlobal.overdueCount, baseline.overdueCount, 1);
@@ -948,7 +895,6 @@ async function main(): Promise<void> {
     check('the final alpha summary counts payments', finalAlpha.totalPayments, 6);
     check('the final alpha summary sums outstanding', finalAlpha.outstandingAmount, 9000);
 
-    // --- getAdminRentHistory: recent activity (FR-21) ---
     const historyFeed = field<PaymentPageShape>(
       await exec(GET_ADMIN_HISTORY, { limit: 3 }, asAdmin),
       'getAdminRentHistory'
@@ -976,14 +922,12 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- tenant history reflects the updates ---
     const rahulHistoryFinal = field<PaymentPageShape>(
       await exec(GET_TENANT_HISTORY, {}, asTenant(rahulUser)),
       'getRentPaymentHistory'
     );
     check('the tenant history reflects the updates', rahulHistoryFinal.total, 4);
 
-    // --- write-invariant integrity sweep ---
     const testPayments = await paymentRepo
       .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.tenant', 'tenant')
@@ -1006,21 +950,12 @@ async function main(): Promise<void> {
     }
     console.log('PASS: every payment satisfies paidAmount <= amount and the paidDate rule');
 
-    // --- the billing-month filter (admin payments page) ---
-    // A payment belongs to the calendar month of its due date. These fixtures
-    // sit in fixed, distinct months (well clear of the running date, so the
-    // derived statuses below are stable) and live on their own tenant, so the
-    // counts above stay exact. Runs last because it adds payments after every
-    // other total was asserted.
     const monthUser = await createTestUser('Month Scope Tenant', MONTH_EMAIL);
     const monthTenant = await createTenantViaGql(
       monthUser.id,
       beta.id,
       'Month Scope Tenant'
     );
-    // Fixed, already-past months so the derived statuses below are stable no
-    // matter when the script runs. February has exactly 28 days, so its last
-    // day pins the inclusive upper bound of the month range.
     const FEB_START = '2025-02-01';
     const FEB_LAST = '2025-02-28';
     const MAR_FIRST = '2025-03-01';
@@ -1047,7 +982,6 @@ async function main(): Promise<void> {
       dueDate: MAR_FIRST,
       notes: 'month scope march first'
     });
-    // December/January together prove the range rolls over the year boundary.
     await createPayment({
       tenantId: monthTenant.id,
       amount: 8000,
@@ -1116,8 +1050,6 @@ async function main(): Promise<void> {
     );
     check('the month filter combines with the search filter', febAndSearch.total, 1);
 
-    // The summary must scope by the identical range, so the cards on the admin
-    // payments page always describe the rows the table is showing.
     const febSummary = field<SummaryShape>(
       await exec(GET_SUMMARY, { month: '2025-02', pgId: beta.id }, asAdmin),
       'getAdminRentSummary'

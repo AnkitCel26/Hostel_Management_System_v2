@@ -41,7 +41,6 @@ interface GetTenantPgRoomData {
   getTenantPgRoom: TenantPgRoom | null;
 }
 
-/** Tinted icon badge — same treatment as the My Room page cards. */
 const iconBadgeSx = {
   width: 40,
   height: 40,
@@ -55,18 +54,12 @@ const iconBadgeSx = {
     alpha(theme.palette.primary.main, 0.1)
 } as const;
 
-/** Tenant-facing status guidance (design system §9 plus plain-language help). */
 const STATUS_HINT: Record<string, string> = {
   open: 'Sent to the property team — they have seen it.',
   in_progress: 'The property team is working on it.',
   resolved: 'Marked as fixed by the property team.'
 };
 
-/**
- * Tenant complaints page (/tenant/complaints): file a complaint and follow its
- * status (FR-22, FR-23). Complaints are shown as cards because the tenant
- * wrote the description and needs to read it in full on any screen size.
- */
 export function TenantComplaintsPage() {
   const { success } = useSnackbar();
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -87,7 +80,6 @@ export function TenantComplaintsPage() {
     }
   );
 
-  // Keep the previous page visible while a refetch is in flight (no flicker).
   const complaintPage = data?.getTenantComplaints ?? previousData?.getTenantComplaints ?? null;
   const complaints = complaintPage?.items ?? [];
   const total = complaintPage?.total ?? 0;
@@ -96,7 +88,6 @@ export function TenantComplaintsPage() {
   const handleSaved = (message: string): void => {
     closeDialog();
     success(message);
-    // A new complaint is the newest item, so return to the first page.
     setPage(0);
     void refetch();
   };

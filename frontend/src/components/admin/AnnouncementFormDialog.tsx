@@ -49,23 +49,13 @@ type AnnouncementFormData = z.infer<typeof announcementSchema>;
 
 interface AnnouncementFormDialogProps {
   open: boolean;
-  /** The announcement being edited, or null to publish a new one. */
   announcement: Announcement | null;
-  /** Properties available to post under (admin list API). */
   pgs: Pg[];
-  /** Property pre-selected when publishing (e.g. the active page filter). */
   defaultPgId?: string;
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/**
- * Shared announcement form for the admin portal (FR-25 publish, FR-26
- * manage). The property is chosen when publishing and shown read-only while
- * editing — an announcement can never move to another property. The creator is
- * always the signed-in admin; the server derives it, so it is never sent.
- */
 export function AnnouncementFormDialog({
   open,
   announcement,
@@ -77,8 +67,6 @@ export function AnnouncementFormDialog({
   const isEdit = announcement !== null;
   const [serverError, setServerError] = React.useState<string | null>(null);
 
-  // No refetchQueries: the parent refetches its own query in onSaved, and
-  // updated Announcement entities merge into the Apollo cache by id.
   const [createAnnouncement] = useMutation(CREATE_ANNOUNCEMENT_MUTATION);
   const [updateAnnouncement] = useMutation(UPDATE_ANNOUNCEMENT_MUTATION);
 
@@ -93,7 +81,6 @@ export function AnnouncementFormDialog({
     defaultValues: { pgId: '', title: '', content: '' }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -109,7 +96,6 @@ export function AnnouncementFormDialog({
   const titleLength = values.title?.length ?? 0;
   const contentLength = values.content?.length ?? 0;
 
-  // Sorting is newest-first, so a new announcement belongs on the first page.
   const onSubmit = async (data: AnnouncementFormData): Promise<void> => {
     setServerError(null);
     try {

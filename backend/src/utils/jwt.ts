@@ -42,11 +42,6 @@ export function signRefreshToken(userId: string, role: AuthRole): string {
   });
 }
 
-/**
- * Verifies a token's signature and its expected type.
- * Returns null for any invalid/expired/mistyped token — never throws,
- * so request handling can degrade to "guest" instead of erroring.
- */
 export function verifyToken(token: string, expectedType: TokenType): TokenPayload | null {
   let decoded: string | jwt.JwtPayload;
   try {

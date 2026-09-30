@@ -12,7 +12,6 @@ export interface CreateRoomInput {
   floor?: number | null;
 }
 
-/** Partial update: undefined and null leave a field unchanged, '' clears it. */
 export interface UpdateRoomInput {
   roomNumber?: string | null;
   roomType?: string | null;
@@ -21,7 +20,6 @@ export interface UpdateRoomInput {
   floor?: number | null;
 }
 
-/** Query args for the paginated room list. */
 export interface RoomListArgs {
   search?: string | null;
   pgId?: string | null;
@@ -29,7 +27,6 @@ export interface RoomListArgs {
   offset?: number | null;
 }
 
-/** Result shape for the paginated room list. */
 export interface RoomPage {
   items: Room[];
   total: number;
@@ -69,20 +66,12 @@ function notFound(message: string): GraphQLError {
   });
 }
 
-/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Guards the id inputs: a malformed id can never match a row, so it is
- * reported with the same BAD_USER_INPUT / NOT_FOUND answer as a
- * well-formed id that does not exist. Without this guard the uuid column
- * error would surface as an internal server error.
- */
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/** PostgreSQL unique-constraint violation (23505). */
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -101,7 +90,6 @@ function validateRoomNumber(raw: string | null | undefined): string {
   return trimmed;
 }
 
-/** Optional room type: '' and null both persist as null (no value). */
 function validateRoomType(raw: string | null | undefined): string | null {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (trimmed.length > ROOM_TYPE_MAX) {
@@ -122,7 +110,6 @@ function validateInt(
   return raw;
 }
 
-/** Resolves the PG a room is being created under (rooms are linked to PGs). */
 async function findPgOrThrow(pgId: string | null | undefined): Promise<Pg> {
   const trimmed = typeof pgId === 'string' ? pgId.trim() : '';
   if (trimmed.length === 0) {
@@ -138,10 +125,6 @@ async function findPgOrThrow(pgId: string | null | undefined): Promise<Pg> {
   return pg;
 }
 
-/**
- * Friendly duplicate check for room numbers within a PG. The database unique
- * constraint (pg, roomNumber) remains the source of truth for races.
- */
 async function assertRoomNumberAvailable(
   pgId: string,
   roomNumber: string,
@@ -183,10 +166,6 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
   }
 }
 
-/**
- * Rooms cannot be moved between PGs (tenants reference the room from their own
- * PG), so pgId is intentionally not accepted here.
- */
 export async function updateRoom(id: string, input: UpdateRoomInput): Promise<Room> {
   if (!isUuid(id)) {
     throw notFound('Room not found');
@@ -205,7 +184,6 @@ export async function updateRoom(id: string, input: UpdateRoomInput): Promise<Ro
   }
   if (input.capacity !== undefined && input.capacity !== null) {
     const capacity = validateInt(input.capacity, CAPACITY_MIN, CAPACITY_MAX, 'Capacity');
-    // Occupancy consistency: never strand more tenants than the room can hold.
     if (capacity < room.occupiedCount) {
       throw badRequest(
         `Capacity cannot be lower than the current occupancy (${room.occupiedCount} tenant(s) are assigned to this room)`
@@ -223,11 +201,6 @@ export async function updateRoom(id: string, input: UpdateRoomInput): Promise<Ro
   return roomRepo().save(room);
 }
 
-/**
- * Searchable, paginated room list (FR-12). Search matches room number and room
- * type case-insensitively; pgId restricts to one PG. Newest rooms first, with
- * a deterministic id tiebreak so pagination is stable.
- */
 export async function getAllRooms(args: RoomListArgs): Promise<RoomPage> {
   const limit = args.limit ?? DEFAULT_PAGE_SIZE;
   if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
@@ -262,7 +235,6 @@ export async function getAllRooms(args: RoomListArgs): Promise<RoomPage> {
   return { items, total, limit, offset };
 }
 
-/** Rooms of one PG ordered by room number (used by the Pg.rooms field resolver). */
 export async function getRoomsForPg(pgId: string): Promise<Room[]> {
   return roomRepo().find({
     where: { pg: { id: pgId } },

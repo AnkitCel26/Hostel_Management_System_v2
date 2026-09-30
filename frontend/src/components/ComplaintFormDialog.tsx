@@ -26,7 +26,6 @@ import type { Complaint, ComplaintStatus } from '../types';
 import { getGraphQLErrorMessage } from '../utils/errors';
 import { formatDate } from '../utils/format';
 
-// Limits mirror the backend complaint service validation (complaint.service.ts).
 const TITLE_MAX = 160;
 const DESCRIPTION_MAX = 5000;
 
@@ -54,26 +53,13 @@ const STATUS_OPTIONS: { value: ComplaintStatus; label: string }[] = [
 
 interface ComplaintFormDialogProps {
   open: boolean;
-  /**
-   * `create` files a new complaint (tenants) and always starts open;
-   * `update` manages an existing complaint (admins) and can change the status.
-   */
   mode: 'create' | 'update';
-  /** The complaint being updated; ignored in create mode. */
   complaint?: Complaint | null;
-  /** Property the complaint is filed under — shown as context while creating. */
   propertyName?: string;
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/**
- * Shared complaint form for both portals (FR-22 tenants, FR-24 admins). The
- * field set follows the role: tenants describe the problem, admins manage the
- * status and can correct the text. The resolved date is never editable — the
- * server derives it from the status.
- */
 export function ComplaintFormDialog({
   open,
   mode,
@@ -101,7 +87,6 @@ export function ComplaintFormDialog({
     defaultValues: { title: '', description: '', status: 'open' }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);

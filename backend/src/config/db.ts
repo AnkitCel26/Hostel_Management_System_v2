@@ -3,7 +3,6 @@ import 'dotenv/config';
 import { DataSource } from 'typeorm';
 
 // Entities/migrations globs work both for ts-node/CLI usage (src/*.ts)
-// and for the compiled runtime (dist/*.js started via npm run start).
 const isCompiled = __filename.endsWith('.js');
 
 export const AppDataSource = new DataSource({

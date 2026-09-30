@@ -11,25 +11,15 @@ interface SnackbarState {
 }
 
 interface SnackbarContextValue {
-  /** Show a toast with an explicit severity (defaults to success). */
   notify: (message: string, severity?: AlertColor) => void;
-  /** Success feedback after a create/update operation. */
   success: (message: string) => void;
-  /** Non-blocking error feedback (form-field errors stay inline). */
   error: (message: string) => void;
 }
 
 const SnackbarContext = createContext<SnackbarContextValue | undefined>(undefined);
 
-/** Toasts vanish automatically after ~3.5 seconds. */
 const AUTO_HIDE_MS = 3500;
 
-/**
- * App-wide snackbar for mutation feedback (MRD forms rule: "Show
- * success/error feedback"). Any page can call `useSnackbar().success(...)`
- * after something is created or updated; the toast shows for 3–4 seconds and
- * then vanishes automatically.
- */
 export function SnackbarProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SnackbarState>({
     open: false,

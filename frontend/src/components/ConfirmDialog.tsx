@@ -11,11 +11,9 @@ import {
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  /** Explains exactly what happens, including anything irreversible. */
   message: string;
   confirmLabel: string;
   cancelLabel?: string;
-  /** Destructive actions use the error colour. */
   destructive?: boolean;
   /** True while the confirmed action is running — blocks closing. */
   busy?: boolean;
@@ -23,11 +21,6 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
 }
 
-/**
- * Reusable confirmation for irreversible actions (destructive colours, busy
- * state, Escape/backdrop blocked while running). Used by the tenant document
- * page and available to later phases.
- */
 export function ConfirmDialog({
   open,
   title,

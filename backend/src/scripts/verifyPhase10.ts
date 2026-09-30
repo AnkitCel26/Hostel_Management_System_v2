@@ -1,15 +1,3 @@
-/**
- * Phase 10 verification: exercises the admin dashboard through the real
- * GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization (admin-only, guests and tenants rejected), the optional PG
- * scope (including a bad id), aggregate correctness against the rows it
- * actually created, the live payment-status rule (a pending payment past its
- * due date must be counted as overdue, not pending), the per-property
- * occupancy series, and the recent-activity lists. Creates throwaway data and
- * cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase10.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -39,9 +27,7 @@ const TEST_PASSWORD = 'phase10-verify-password';
 const TEST_PG_NAMES = ['Phase10 Verify PG Alpha', 'Phase10 Verify PG Beta'];
 const NONEXISTENT_ID = '00000000-0000-0000-0000-000000000000';
 
-/** A date well in the past, so a payment is unambiguously overdue. */
 const OVERDUE_DATE = '2020-01-01';
-/** A date well in the future, so a payment is unambiguously pending. */
 const FUTURE_DATE = '2999-01-01';
 
 interface GqlResult {
@@ -135,7 +121,6 @@ const DASHBOARD_FIELDS = `
   }
 `;
 
-/** Runs an operation as `user` (id + role are all the guards read). */
 async function gql(
   query: string,
   variables: Record<string, unknown> = {},
@@ -173,7 +158,6 @@ async function createUser(name: string, email: string, role: UserRole): Promise<
   return repo.save(user);
 }
 
-/** Reads the whole dashboard as the test admin. */
 async function readStats(
   variables: Record<string, unknown> = {},
   admin: User
@@ -194,16 +178,10 @@ async function readStats(
   return stats;
 }
 
-/**
- * Asserts an unscoped count moved by exactly the amount this test's fixture
- * added. The database is shared (it may hold demo data), so an unscoped total
- * is only meaningful as a delta from the pre-fixture baseline.
- */
 function checkDelta(label: string, after: number, before: number, added: number): void {
   check(`${label} (${after - before} added)`, after - before === added);
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanup(): Promise<void> {
   const pgRepo = AppDataSource.getRepository(Pg);
   const pgs = await pgRepo
@@ -213,7 +191,6 @@ async function cleanup(): Promise<void> {
   const pgIds = pgs.map((pg) => pg.id);
 
   if (pgIds.length > 0) {
-    // Payments and complaints hang off tenants, which hang off the PGs.
     const tenantRepo = AppDataSource.getRepository(Tenant);
     const tenants = await tenantRepo
       .createQueryBuilder('tenant')
@@ -222,8 +199,6 @@ async function cleanup(): Promise<void> {
     const tenantIds = tenants.map((tenant) => tenant.id);
 
     if (tenantIds.length > 0) {
-      // Query builders rather than repository.delete({ relation: ... }), which
-      // cannot express an In() list on a relation path.
       await AppDataSource.getRepository(Complaint)
         .createQueryBuilder()
         .delete()
@@ -258,21 +233,14 @@ async function main(): Promise<void> {
   await cleanup();
 
   const admin = await createUser(TEST_ADMIN_NAME, TEST_ADMIN_EMAIL, UserRole.Admin);
-  // tenants.userId is unique (User 1 ─ 0..1 Tenant), so each fixture tenant
-  // needs its own user row.
   const tenantUser = await createUser(TENANT_NAME, TENANT_EMAIL, UserRole.Tenant);
   const tenantUser2 = await createUser('Phase Ten Tenant Two', TENANT_EMAIL_2, UserRole.Tenant);
   const tenantUser3 = await createUser('Phase Ten Tenant Three', TENANT_EMAIL_3, UserRole.Tenant);
 
   try {
-    /* ---------------------------------------------------------------- */
-    /* Authorization (FR-31: Admin-only)                                */
-    /* ---------------------------------------------------------------- */
 
     const query = `query { getAdminDashboardStats { ${DASHBOARD_FIELDS} } }`;
 
-    // requireAdmin rejects guests and tenants with the same FORBIDDEN code
-    // (the shared role guard, matching every other admin-only operation).
     const asGuest = await gql(query);
     check(
       'guest is rejected',
@@ -286,11 +254,6 @@ async function main(): Promise<void> {
       (asTenant.errors?.[0]?.extensions?.code ?? '') === 'FORBIDDEN'
     );
     check('tenant gets no data', !asTenant.data?.getAdminDashboardStats);
-
-    /* ---------------------------------------------------------------- */
-    /* Baseline: the database may already hold demo data, so unscoped    */
-    /* totals are only ever checked as deltas from this snapshot.         */
-    /* ---------------------------------------------------------------- */
 
     const before = await readStats({}, admin);
     check('baseline query succeeds', before !== undefined);
@@ -309,22 +272,15 @@ async function main(): Promise<void> {
       before.occupiedRooms + before.vacantRooms === before.totalRooms
     );
 
-    /* ---------------------------------------------------------------- */
-    /* Fixture: 2 properties, 4 rooms, 3 tenants, 4 payments, 3 complaints */
-    /* ---------------------------------------------------------------- */
-
     const pgRepo = AppDataSource.getRepository(Pg);
     const roomRepo = AppDataSource.getRepository(Room);
     const tenantRepo = AppDataSource.getRepository(Tenant);
     const paymentRepo = AppDataSource.getRepository(RentPayment);
     const complaintRepo = AppDataSource.getRepository(Complaint);
 
-    // Alpha: 2 rooms of 2 and 1 beds = 3 beds. Occupancy 1/2 and 0/1.
     const alpha = await pgRepo.save(
       pgRepo.create({ name: TEST_PG_NAMES[0], address: '1 Alpha Street', city: 'Pune' })
     );
-    // Beta: 2 rooms of 2 beds each = 4 beds. Both fully occupied.
-    // Fixture totals: 7 beds, 5 occupied, 4 rooms, 3 occupied.
     const beta = await pgRepo.save(
       pgRepo.create({ name: TEST_PG_NAMES[1], address: '2 Beta Street', city: 'Pune' })
     );
@@ -373,7 +329,6 @@ async function main(): Promise<void> {
     void betaRoomA;
     void betaRoomB;
 
-    // Three tenants across the two properties, one per user row.
     const alphaTenant1 = await tenantRepo.save(
       tenantRepo.create({ name: 'Alpha Tenant One', pg: alpha, room: alphaRoomA, user: tenantUser })
     );
@@ -384,10 +339,6 @@ async function main(): Promise<void> {
       tenantRepo.create({ name: 'Beta Tenant One', pg: beta, room: betaRoomA, user: tenantUser3 })
     );
 
-    // Four payments, one per live status, so every branch of the status
-    // derivation rule is represented. The overdue one is stored as "pending"
-    // so the test proves the dashboard counts the LIVE status, not the stored
-    // snapshot.
     const paid = await paymentRepo.save(
       paymentRepo.create({
         tenant: alphaTenant1,
@@ -416,8 +367,6 @@ async function main(): Promise<void> {
         status: PaymentStatus.Pending
       })
     );
-    // Stored "pending", but its due date has passed: the dashboard must count
-    // this as overdue.
     const overdue = await paymentRepo.save(
       paymentRepo.create({
         tenant: alphaTenant1,
@@ -452,10 +401,6 @@ async function main(): Promise<void> {
         resolvedAt: new Date()
       })
     ]);
-
-    /* ---------------------------------------------------------------- */
-    /* Unscoped aggregate correctness                                   */
-    /* ---------------------------------------------------------------- */
 
     const stats = await readStats({}, admin);
 
@@ -494,24 +439,16 @@ async function main(): Promise<void> {
       stats.occupiedRooms + stats.vacantRooms === stats.totalRooms
     );
 
-    /* ---------------------------------------------------------------- */
-    /* Per-property occupancy series                                     */
-    /* ---------------------------------------------------------------- */
-
-    // The series always spans every property, so it is checked for the two
-    // fixture rows and for the ordering rule rather than a fixed length.
     const series = stats.occupancyByProperty;
     check('series has one row per property in the database', series.length === stats.totalPgs);
     const alphaRow = series.find((row) => row.pgId === alpha.id);
     const betaRow = series.find((row) => row.pgId === beta.id);
     check('series includes the first fixture property', alphaRow !== undefined);
     check('series includes the second fixture property', betaRow !== undefined);
-    // Alpha: 1 of 3 beds = 33%
     check('alpha occupancy percent', alphaRow?.occupancyPercent === 33);
     check('alpha occupied beds', alphaRow?.occupiedBeds === 1);
     check('alpha total beds', alphaRow?.totalBeds === 3);
     check('alpha occupied rooms', alphaRow?.occupiedRooms === 1);
-    // Beta: 4 of 4 beds = 100%
     check('beta occupancy percent', betaRow?.occupancyPercent === 100);
     check('beta occupied beds', betaRow?.occupiedBeds === 4);
     check(
@@ -525,17 +462,12 @@ async function main(): Promise<void> {
         : 0))
     );
 
-    /* ---------------------------------------------------------------- */
-    /* Recent activity lists                                            */
-    /* ---------------------------------------------------------------- */
-
     const recentPayments = stats.recentPayments;
     check('recent payments page shape', recentPayments.limit === 5 && recentPayments.offset === 0);
     check(
       'recent payments returns at most the default limit',
       recentPayments.items.length === Math.min(5, stats.totalPayments)
     );
-    // The overdue payment was the most recently written, so it leads.
     check('recent payments is newest-activity first', recentPayments?.items[0]?.id === overdue.id);
     check(
       'recent payments total matches the aggregate count',
@@ -553,12 +485,6 @@ async function main(): Promise<void> {
       recentComplaints.items.length === Math.min(5, recentComplaints.total)
     );
 
-    /* ---------------------------------------------------------------- */
-    /* PG scope                                                        */
-    /* ---------------------------------------------------------------- */
-
-    // A scoped dashboard is fully isolated from any other data in the
-    // database, so these totals are absolute rather than deltas.
     const alphaStats = await readStats({ pgId: alpha.id }, admin);
     check('scope reports one property', alphaStats.totalPgs === 1);
     check("scope counts only that property's rooms", alphaStats.totalRooms === 2);
@@ -606,10 +532,6 @@ async function main(): Promise<void> {
       (badScope.errors?.[0]?.extensions?.code ?? '') === 'BAD_USER_INPUT'
     );
 
-    /* ---------------------------------------------------------------- */
-    /* recentLimit bounds                                              */
-    /* ---------------------------------------------------------------- */
-
     const limitQuery = `query Limited($recentLimit: Int) {
       getAdminDashboardStats(recentLimit: $recentLimit) {
         recentPayments { limit total items { id } }
@@ -637,10 +559,6 @@ async function main(): Promise<void> {
       (tooBigLimit.errors?.[0]?.extensions?.code ?? '') === 'BAD_USER_INPUT'
     );
 
-    /* ---------------------------------------------------------------- */
-    /* Consistency with the Phase 6 rent summary                        */
-    /* ---------------------------------------------------------------- */
-
     const summaryQuery = `query {
       getAdminRentSummary {
         totalPayments
@@ -655,8 +573,6 @@ async function main(): Promise<void> {
     }`;
     const summary = await gql(summaryQuery, {}, { id: admin.id, role: 'Admin' });
     const summaryData = summary.data?.getAdminRentSummary as Record<string, number> | undefined;
-    // The dashboard must never disagree with the payments page about the same
-    // numbers: both read the same live status predicates.
     check('dashboard and rent summary agree on totals', summaryData !== undefined && (
       summaryData.totalPayments === stats?.totalPayments &&
       summaryData.totalBilled === stats?.totalBilled &&
@@ -668,12 +584,6 @@ async function main(): Promise<void> {
       summaryData.overdueCount === stats?.overdueCount
     ));
 
-    /* ---------------------------------------------------------------- */
-    /* The counted rows are the rows in the tables                      */
-    /* ---------------------------------------------------------------- */
-
-    // The counted rows are the rows in the tables: every count the dashboard
-    // reports must equal a real COUNT(*) on the same table.
     const dbPaymentCount = await paymentRepo.count();
     const dbComplaintCount = await complaintRepo.count();
     const dbRoomCount = await roomRepo.count();
@@ -687,8 +597,6 @@ async function main(): Promise<void> {
     check('tenant count matches the table', stats.totalTenants === dbTenantCount);
     check('property count matches the table', stats.totalPgs === dbPgCount);
 
-    // The two payments that are fully paid or partly paid must not be counted
-    // as overdue — only the one whose due date has actually passed.
     check('a fully paid payment is not counted as overdue', stats.overdueCount - before.overdueCount === 1);
     check(
       'bed totals come from room capacity, not the tenant count',

@@ -31,13 +31,6 @@ function SkipLink() {
   );
 }
 
-/**
- * Global chrome: skip link, header, main landmark, footer.
- * Post-login routes (/admin/*, /tenant/*, /profile) use the portal shell —
- * sidebar navigation + portal top bar — while public pages keep the marketing
- * header and footer. Pages render inside and must not render their own
- * app-level header/footer.
- */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 

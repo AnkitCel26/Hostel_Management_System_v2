@@ -1,15 +1,3 @@
-/**
- * Phase 8 verification: exercises announcement management through the real
- * GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization (admin writes, tenant reads own PG, both roles guarded),
- * input validation, creation scoping (PG + caller-derived creator), partial
- * updates, searchable/filterable/paginated admin listing, tenant-scoped
- * PG listing, nested resolution, concurrent updates of one announcement,
- * and a write-invariant integrity sweep. Creates throwaway data and cleans
- * up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase8.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -177,7 +165,6 @@ function expectError(label: string, result: GqlResult, code: string): void {
   console.log(`PASS: ${label}`);
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanupTestData(): Promise<void> {
   const userRepo = AppDataSource.getRepository(User);
   const tenantRepo = AppDataSource.getRepository(Tenant);
@@ -249,7 +236,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // --- throwaway users (auth flows are Phase 3 and already verified) ---
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -279,7 +265,6 @@ async function main(): Promise<void> {
     const roomlessUser = await createTestUser('Roomless Tenant', ROOMLESS_EMAIL);
     const asTenant = (user: User): AuthUser => ({ id: user.id, role: 'Tenant' });
 
-    // --- PGs, a room, and tenants (Phase 4/5 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
       field<PgShape>(
         await exec(CREATE_PG, { input: { name, address: `${name} address` } }, asAdmin),
@@ -334,7 +319,6 @@ async function main(): Promise<void> {
         'updateAnnouncement'
       );
 
-    // --- authorization (FR-33: both roles guarded at the resolver) ---
     expectError('guest cannot list all announcements', await exec(GET_ANNOUNCEMENTS, {}), 'FORBIDDEN');
     expectError(
       'guest cannot read the tenant announcement list',
@@ -383,7 +367,6 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- createAnnouncement validation (FR-25) ---
     expectError(
       'createAnnouncement rejects an unknown pgId',
       await exec(
@@ -457,7 +440,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- createAnnouncement (FR-25): scoping, creator, trimming ---
     const a1 = await createAnnouncement({
       pgId: alpha.id,
       title: '  Water supply maintenance  ',
@@ -486,14 +468,11 @@ async function main(): Promise<void> {
     });
     check('a 160-character title is accepted', longTitle.title.length, 160);
 
-    // --- updateAnnouncement validation (FR-26) ---
     expectError(
       'updateAnnouncement rejects an unknown id',
       await exec(UPDATE_ANNOUNCEMENT, { id: NONEXISTENT_ID, input: { title: 'x' } }, asAdmin),
       'NOT_FOUND'
     );
-    // A malformed id must be reported like any other unknown id, never as an
-    // internal server error from the uuid column.
     expectError(
       'updateAnnouncement rejects a malformed id',
       await exec(UPDATE_ANNOUNCEMENT, { id: 'not-a-uuid', input: { title: 'x' } }, asAdmin),
@@ -519,7 +498,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- updateAnnouncement (FR-26): partial updates, immutable scope ---
     const reworded = await updateAnnouncement(a1.id, {
       title: '  Water supply maintenance (updated)  ',
       content: '  Water will be off from 9am to 1pm on Sunday.  '
@@ -533,8 +511,6 @@ async function main(): Promise<void> {
     check('an empty update keeps the title', noop.title, reworded.title);
     check('an empty update keeps the content', noop.content, reworded.content);
 
-    // --- concurrent updates of one announcement serialize (row lock) ---
-    // Two disjoint-field updates racing: both must land, with no lost update.
     const [racedTitle, racedContent] = await Promise.all([
       exec(UPDATE_ANNOUNCEMENT, { id: a2.id, input: { title: 'raced title' } }, asAdmin),
       exec(UPDATE_ANNOUNCEMENT, { id: a2.id, input: { content: 'raced content body' } }, asAdmin)
@@ -554,7 +530,6 @@ async function main(): Promise<void> {
     check('the raced announcement kept the title', racedAnnouncement.title, 'raced title');
     check('the raced announcement kept the content', racedAnnouncement.content, 'raced content body');
 
-    // --- getAllAnnouncements: totals, filters, search, pagination (admin) ---
     const alphaPage = field<AnnouncementPageShape>(
       await exec(GET_ANNOUNCEMENTS, { pgId: alpha.id }, asAdmin),
       'getAllAnnouncements'
@@ -642,7 +617,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- getTenantPgAnnouncements: tenant-scoped PG list (FR-27) ---
     const rahulList = field<AnnouncementPageShape>(
       await exec(GET_TENANT_PG_ANNOUNCEMENTS, {}, asTenant(rahulUser)),
       'getTenantPgAnnouncements'
@@ -687,7 +661,6 @@ async function main(): Promise<void> {
     check('a user without a tenant record gets an empty page', roomlessList.total, 0);
     check('the empty announcement page has no items', roomlessList.items.length, 0);
 
-    // --- nested resolution through the relation field resolvers ---
     const deep = field<{ items: DeepAnnouncementShape[] }>(
       await exec(GET_ANNOUNCEMENTS_DEEP, { search: 'town hall meeting' }, asAdmin),
       'getAllAnnouncements'
@@ -708,7 +681,6 @@ async function main(): Promise<void> {
     if (!betaPg) throw new Error('The beta PG was not returned');
     check('Pg.announcements resolves the beta PG announcements', betaPg.announcements.length, 1);
 
-    // --- write-invariant integrity sweep ---
     const announcementRepo = AppDataSource.getRepository(Announcement);
     const testAnnouncements = await announcementRepo
       .createQueryBuilder('announcement')

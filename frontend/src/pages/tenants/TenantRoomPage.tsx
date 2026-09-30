@@ -34,7 +34,6 @@ interface GetTenantPgRoomData {
   getTenantPgRoom: TenantPgRoom | null;
 }
 
-/** Tinted icon badge — same treatment as the property cards and stat tiles. */
 const iconBadgeSx = {
   width: 44,
   height: 44,
@@ -62,7 +61,6 @@ function occupancyStatTone(percent: number): 'success' | 'warning' | 'error' {
   return 'success';
 }
 
-/** Friendly occupancy note derived from the room's live bed counts. */
 function sharingNote(room: Room): string {
   if (room.occupiedCount >= room.capacity) {
     return 'This room is currently at full capacity.';
@@ -74,11 +72,6 @@ function sharingNote(room: Room): string {
   return 'You have this room to yourself.';
 }
 
-/**
- * Tenant My Room page (/tenant/room): shows the tenant's assigned PG and room
- * (FR-17). "Not assigned yet" is a valid empty state while the admin has not
- * created the tenant's assignment.
- */
 export function TenantRoomPage() {
   const { data, loading, error, refetch } = useQuery<GetTenantPgRoomData>(GET_TENANT_PG_ROOM_QUERY);
 
@@ -122,7 +115,6 @@ export function TenantRoomPage() {
         subtitle={`Your current ${PROPERTY_TERM.singularLower} and room assignment.`}
       />
 
-      {/* Summary row — same stat tiles as the management pages */}
       <Box
         sx={{
           display: 'grid',
@@ -188,7 +180,6 @@ export function TenantRoomPage() {
           alignItems: 'stretch'
         }}
       >
-        {/* Room card — the focus of this page */}
         <Card sx={{ height: '100%' }}>
           <CardContent sx={{ p: 3 }}>
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
@@ -214,7 +205,6 @@ export function TenantRoomPage() {
                   <OccupancyChip occupied={room.occupiedCount} capacity={room.capacity} />
                 </Stack>
 
-                {/* Occupancy summary — same pattern as the property cards */}
                 <Box sx={{ mt: 2.5 }}>
                   <Stack
                     direction="row"
@@ -309,7 +299,6 @@ export function TenantRoomPage() {
           </CardContent>
         </Card>
 
-        {/* Property card */}
         <Card sx={{ height: '100%' }}>
           <CardContent sx={{ p: 3 }}>
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>

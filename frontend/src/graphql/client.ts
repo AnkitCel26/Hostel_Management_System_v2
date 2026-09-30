@@ -34,12 +34,6 @@ async function requestRefresh(): Promise<boolean> {
   }
 }
 
-/**
- * On UNAUTHENTICATED (e.g. expired access token): silently refreshes the
- * session via the refresh cookie and retries the original operation once.
- * A second failure surfaces the error to the UI. Single-flight: concurrent
- * failures share one refresh request.
- */
 const errorLink = onError(({ graphQLErrors, operation, forward }) => {
   const isUnauthenticated = (graphQLErrors ?? []).some(
     (error) => error.extensions?.code === 'UNAUTHENTICATED'

@@ -13,20 +13,6 @@ interface StatCardProps {
   tone?: StatTone;
 }
 
-/**
- * Summary statistic card: tinted icon badge beside a small uppercase label, a
- * bold value, and a muted sublabel. Used for page-level summary rows
- * (management pages, dashboards) and styled to match the homepage's tinted
- * icon-badge language.
- *
- * The text block is a stretched column so every card in a summary row shares
- * one internal rhythm: the label sits on the top line, the sublabel on the
- * bottom line, and the value fills the space between them. That keeps the
- * labels and sublabels of a whole row aligned even when the values differ in
- * length or wrap to two lines. The sublabel line is always reserved (a
- * non-breaking space when there is nothing to say) so cards without a sublabel
- * do not sit higher than their neighbours.
- */
 export function StatCard({ icon, label, value, sublabel, tone = 'primary' }: StatCardProps) {
   return (
     <Card sx={{ height: '100%' }}>

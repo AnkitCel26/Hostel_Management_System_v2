@@ -54,7 +54,6 @@ interface GetTenantPgRoomData {
   getTenantPgRoom: TenantPgRoom | null;
 }
 
-/** Tinted icon badge — same treatment as the My Room and My Complaints pages. */
 const iconBadgeSx = {
   width: 36,
   height: 36,
@@ -68,7 +67,6 @@ const iconBadgeSx = {
     alpha(theme.palette.primary.main, 0.1)
 } as const;
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -81,7 +79,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the admin tables. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -89,10 +86,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/**
- * File name shown under the document name. Storage paths are prefixed with a
- * UUID to keep object names unique, so that prefix is stripped for display.
- */
 function getFileLabel(docUrl: string): string {
   try {
     const path = new URL(docUrl).pathname;
@@ -104,13 +97,6 @@ function getFileLabel(docUrl: string): string {
   }
 }
 
-/**
- * Tenant documents page (/tenant/documents): upload, open, update, and delete
- * the caller's own documents (FR-28, FR-29, FR-30). The file lives in Supabase
- * storage; this page uploads it, then records the returned URL and metadata
- * through the backend. The server scopes the list to the caller's own tenant
- * record, so one tenant never sees another's documents.
- */
 export function TenantDocumentsPage() {
   const { success, error: notifyError } = useSnackbar();
   const storageReady = isDocumentStorageConfigured();
@@ -123,8 +109,6 @@ export function TenantDocumentsPage() {
   });
   const [deleteTarget, setDeleteTarget] = React.useState<TenantDocument | null>(null);
 
-  // A document belongs to a tenant record, so the server needs the assignment
-  // before it accepts an upload.
   const assignmentQuery = useQuery<GetTenantPgRoomData>(GET_TENANT_PG_ROOM_QUERY);
   const assignment = assignmentQuery.data?.getTenantPgRoom ?? null;
   const canUpload = assignment !== null && !assignmentQuery.loading;
@@ -137,9 +121,6 @@ export function TenantDocumentsPage() {
     }
   );
 
-  // No refetchQueries: handleDelete refetches this query itself so the
-  // surrounding page state (page index, toast) stays in one place, and
-  // returned TenantDocument entities merge into the Apollo cache by id.
   const [deleteDocumentRecord, { loading: deleting }] = useMutation(DELETE_TENANT_DOCUMENTS_MUTATION);
 
   // Keep the previous page visible while a refetch is in flight (no flicker).
@@ -151,16 +132,6 @@ export function TenantDocumentsPage() {
   const openEdit = (document: TenantDocument): void => setDialog({ open: true, document });
   const closeDialog = (): void => setDialog({ open: false, document: null });
 
-  /**
-   * Reloads the list for a given page. The target variables are passed to
-   * refetch on purpose: switching page only changes the query variables, and
-   * Apollo answers a previously visited page from its cache, which would leave
-   * the record count stale after an upload or a delete.
-   *
-   * A failed reload is not raised here — the query surfaces its own error state
-   * on the page, and a write that already succeeded must not be reported as
-   * failed because the follow-up reload did not come back.
-   */
   const refreshAt = async (targetPage: number): Promise<void> => {
     if (targetPage !== page) setPage(targetPage);
     try {
@@ -174,7 +145,6 @@ export function TenantDocumentsPage() {
     const wasCreate = dialog.document === null;
     closeDialog();
     success(message);
-    // A new document is the newest item, so return to the first page.
     void refreshAt(wasCreate ? 0 : page);
   };
 
@@ -190,10 +160,7 @@ export function TenantDocumentsPage() {
       await deleteDocumentRecord({ variables: { ids: [target.id] } });
       setDeleteTarget(null);
       success(`"${target.docName}" deleted.`);
-      // Stepping back avoids landing on an empty page after the last delete.
       void refreshAt(wasLastItemOnPage && page > 0 ? page - 1 : page);
-      // The record is gone; removing the stored file is a follow-up clean-up.
-      // A failure here must not resurrect or block the confirmed deletion.
       removeDocumentFile(target.docUrl).catch((storageError: unknown) => {
         notifyError(
           storageError instanceof DocumentStorageError

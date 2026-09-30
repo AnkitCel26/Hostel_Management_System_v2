@@ -29,7 +29,6 @@ interface GetTenantPgAnnouncementsData {
   getTenantPgAnnouncements: AnnouncementPage;
 }
 
-/** Tinted icon badge — same treatment as the My Room and My Complaints page cards. */
 const iconBadgeSx = {
   width: 40,
   height: 40,
@@ -43,13 +42,6 @@ const iconBadgeSx = {
     alpha(theme.palette.primary.main, 0.1)
 } as const;
 
-/**
- * Tenant announcements page (/tenant/announcements): the notices posted for
- * the tenant's own property, newest first (FR-27). The list is scoped by the
- * server to the caller's PG, so a tenant can never see another property's
- * announcements. Shown as cards because the body is written to be read in
- * full on any screen size.
- */
 export function TenantAnnouncementsPage() {
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(5);
@@ -62,7 +54,6 @@ export function TenantAnnouncementsPage() {
     }
   );
 
-  // Keep the previous page visible while a refetch is in flight (no flicker).
   const announcementPage =
     data?.getTenantPgAnnouncements ?? previousData?.getTenantPgAnnouncements ?? null;
   const announcements = announcementPage?.items ?? [];

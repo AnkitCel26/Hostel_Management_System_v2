@@ -1,25 +1,3 @@
-/**
- * Dev utility: seeds a complete, invariant-consistent demo dataset so every
- * feature built so far (Phases 3 through 9) can be exercised end to end.
- *
- * Usage: npm run seed:demo
- *
- * Idempotent: every record is keyed by a natural key (email, PG name,
- * PG+room number, user->tenant link, tenant+dueDate+amount, tenant/pg+title,
- * tenant+docName), so re-running only fills gaps and re-asserts the seeded
- * credentials below.
- *
- * All writes go through the service layer (never raw inserts), so the core
- * invariants hold exactly as in production paths:
- *   - room.occupiedCount advances with each tenant assignment (FR-16);
- *   - payment status/paidDate are derived, never stored by hand;
- *   - complaint resolvedAt is derived from the status;
- *   - announcement creator and document owner are derived from the caller.
- *
- * Seeded credentials (passwords re-asserted on every run):
- *   Admin:  admin@hostel.test  / Admin@12345
- *   Tenant: tenant1@hostel.test / Passw0rd123  (plus tenant2..tenant5)
- */
 import 'reflect-metadata';
 import { AppDataSource } from '../config/db';
 import { User, UserRole } from '../entities/user.entity';
@@ -93,7 +71,6 @@ const TENANTS: TenantSeed[] = [
     roomNumber: 'G-102'
   },
   {
-    // No room: exercises the "tenant without a room assignment" states.
     name: 'Sneha Iyer',
     email: 'tenant5@hostel.test',
     phone: '9876500005',
@@ -280,15 +257,6 @@ const ANNOUNCEMENTS: Array<{
   }
 ];
 
-/**
- * Demo document records. docUrl is derived from SUPABASE_URL (backend/.env) at
- * seed time rather than hardcoded: a placeholder host would persist a dead
- * link that the tenant's "open document" action 404s on, and the docUrl
- * validator only requires an absolute http(s) URL, so nothing downstream would
- * catch it. Object paths are namespaced under `demo/` because the real browser
- * upload namespaces by user id (`<userId>/…`) and only a signed-in tenant may
- * write into their own folder.
- */
 const DEMO_DOCUMENTS: Array<{
   tenantEmail: string;
   docName: string;
@@ -519,12 +487,6 @@ async function ensureAnnouncements(admin: User): Promise<void> {
   }
 }
 
-/**
- * Seeds the demo document records. The docUrl is derived from SUPABASE_URL, so
- * this is skipped with a warning when storage is not configured rather than
- * writing a URL that would 404 the moment a tenant opened the document. The
- * rest of the demo dataset is unaffected.
- */
 async function ensureDocuments(
   tenants: Map<string, { user: User; tenant: Tenant }>
 ): Promise<void> {
@@ -547,8 +509,6 @@ async function ensureDocuments(
       });
       const docUrl = buildDocumentUrl(doc.objectPath);
       if (!docUrl) {
-        // No storage project: leave whatever is in the table untouched rather
-        // than writing another dead link.
         warnStorageNotConfigured('seed:demo');
         if (existing) {
           console.log(`document exists: ${doc.docName} (${email})`);
@@ -558,9 +518,6 @@ async function ensureDocuments(
         continue;
       }
       if (existing) {
-        // A record seeded by an earlier run (or hand-edited) can point at a
-        // placeholder host, which 404s as soon as a tenant opens it. Re-assert
-        // the URL so re-seeding is what repairs it.
         if (existing.docUrl !== docUrl) {
           existing.docUrl = docUrl;
           await repo.save(existing);
@@ -609,7 +566,6 @@ async function main(): Promise<void> {
   try {
     console.log('--- seeding demo data ---');
 
-    // Admin credentials are re-asserted on every run.
     const admin = await upsertUser(
       'Portal Admin',
       ADMIN_EMAIL,

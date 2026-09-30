@@ -7,18 +7,6 @@ import { Tenant } from '../../entities/tenant.entity';
 import { TenantDocument } from '../../entities/tenant_docs.entity';
 import { User } from '../../entities/user.entity';
 
-/**
- * Relation loaders backing the GraphQL field resolvers for the Phase 2 base
- * types. Pure data access only — validation and business rules live in the
- * feature services (auth, pg, room, and later phases).
- *
- * Two shapes:
- * - One-to-many: fetch children by the parent's primary key.
- * - Many-to-one / one-to-one: re-fetch the entity by its own primary key with
- *   its relations attached, so every reference resolves no matter how the
- *   parent entity was originally loaded.
- */
-
 export async function roomsForPg(pgId: string): Promise<Room[]> {
   return AppDataSource.getRepository(Room).find({
     where: { pg: { id: pgId } },

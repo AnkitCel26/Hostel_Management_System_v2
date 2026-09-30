@@ -8,10 +8,6 @@ interface PageHeaderProps {
   action?: ReactNode;
 }
 
-/**
- * Consistent page heading for management pages: large bold title, optional
- * secondary description, and an optional action slot (design system §3).
- */
 export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
     <Box

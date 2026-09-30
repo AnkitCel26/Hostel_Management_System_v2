@@ -29,8 +29,6 @@ export class User {
   email!: string;
 
   // Never expose this through GraphQL responses (FR-34).
-  // select:false keeps the hash out of every default query and relation load;
-  // the auth service opts in explicitly only to verify it during login.
   @Column({ type: 'varchar', length: 255, select: false })
   password!: string;
 
@@ -55,7 +53,6 @@ export class User {
   @OneToOne(() => Tenant, (tenant) => tenant.user)
   tenant?: Tenant | null;
 
-  // User 1 ─ * Announcement (creator)
   @OneToMany(() => Announcement, (announcement) => announcement.createdBy)
   announcements?: Announcement[];
 }

@@ -55,7 +55,6 @@ interface GetAllUsersData {
   allUsers: AdminUser[];
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -68,7 +67,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the room table actions. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -76,12 +74,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/**
- * Admin Tenant Management page (/admin/tenants): searchable, paginated tenant
- * table with a property filter, plus create/edit dialogs covering PG and room
- * assignment and reassignment (FR-13, FR-14, FR-15, FR-16).
- * Supports ?pgId=<id> to pre-filter.
- */
 export function AdminTenantsPage() {
   const [searchParams] = useSearchParams();
   const { success } = useSnackbar();
@@ -97,7 +89,6 @@ export function AdminTenantsPage() {
     tenant: null
   });
 
-  // Filters returning to their default values restart pagination.
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, pgFilter]);
@@ -115,12 +106,9 @@ export function AdminTenantsPage() {
       notifyOnNetworkStatusChange: true
     }
   );
-  // PGs with rooms feed both the filter dropdown and the dialog's cascaded
-  // property → room picker; the user list feeds the dialog's link-user picker.
   const pgsQuery = useQuery<GetAllPgsRoomsData>(GET_ALL_PGS_ROOMS_QUERY);
   const usersQuery = useQuery<GetAllUsersData>(GET_ALL_USERS_QUERY);
 
-  // Keep the previous page visible while a refetch is in flight (no flicker).
   const tenantPage = data?.getAllTenants ?? previousData?.getAllTenants ?? null;
   const tenants = tenantPage?.items ?? [];
   const total = tenantPage?.total ?? 0;
@@ -150,7 +138,6 @@ export function AdminTenantsPage() {
         }
       />
 
-      {/* Toolbar */}
       <Card sx={{ mb: 3 }}>
         <CardContent
           sx={{

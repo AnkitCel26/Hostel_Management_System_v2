@@ -25,7 +25,6 @@ const paymentSchema = z
       .min(1, 'Amount must be at least 1')
       .max(10_000_000, 'Amount must be 10,000,000 or less'),
     // Optional: an empty field arrives as NaN and is treated as "not set"
-    // (create defaults to 0; update keeps the current value).
     paidAmount: z.union([
       z.nan(),
       z.number().int('Paid amount must be a whole number')
@@ -48,10 +47,6 @@ const paymentSchema = z
         path: ['paidAmount']
       });
     }
-    // A paid date only makes sense while the payment is fully paid. Only
-    // checked when the paid amount is explicitly provided — on update an
-    // empty paid-amount field keeps the current value, which the backend
-    // re-derives against.
     if (data.paidDate !== '' && paidAmount !== undefined && paidAmount < data.amount) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -65,12 +60,9 @@ type PaymentFormData = z.infer<typeof paymentSchema>;
 
 interface PaymentFormDialogProps {
   open: boolean;
-  /** The payment being edited, or null to record a new one. */
   payment: RentPayment | null;
-  /** Tenant records available for selection when recording a payment. */
   tenants: Tenant[];
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
@@ -78,8 +70,6 @@ export function PaymentFormDialog({ open, payment, tenants, onClose, onSaved }: 
   const isEdit = payment !== null;
   const [serverError, setServerError] = React.useState<string | null>(null);
 
-  // No refetchQueries: the parent refetches its own queries in onSaved, and
-  // updated RentPayment entities merge into the Apollo cache by id.
   const [createRentPayment] = useMutation(CREATE_RENT_PAYMENT_MUTATION);
   const [updateRentPayment] = useMutation(UPDATE_RENT_PAYMENT_MUTATION);
 
@@ -95,7 +85,6 @@ export function PaymentFormDialog({ open, payment, tenants, onClose, onSaved }: 
       }
     });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -112,8 +101,6 @@ export function PaymentFormDialog({ open, payment, tenants, onClose, onSaved }: 
 
   const onSubmit = async (data: PaymentFormData): Promise<void> => {
     setServerError(null);
-    // An empty paid-amount field stays unset: create defaults to 0 on the
-    // server; update keeps the stored value.
     const paidAmount =
       typeof data.paidAmount === 'number' && !Number.isNaN(data.paidAmount)
         ? data.paidAmount

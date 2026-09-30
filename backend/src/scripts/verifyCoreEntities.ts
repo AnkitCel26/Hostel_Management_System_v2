@@ -1,9 +1,3 @@
-/**
- * Phase 2 verification: proves the application can read and write all core
- * entities and that every relationship resolves in both directions.
- *
- * Run: npm run verify:entities
- */
 import 'reflect-metadata';
 import { AppDataSource } from '../config/db';
 import { Announcement } from '../entities/announcement.entity';
@@ -87,7 +81,6 @@ async function createAndVerify(): Promise<void> {
   const complaintRepo = AppDataSource.getRepository(Complaint);
   const announcementRepo = AppDataSource.getRepository(Announcement);
 
-  // --- write all core entities ---
   const user = await userRepo.save(
     userRepo.create({
       name: 'Phase Two Verify',
@@ -169,7 +162,6 @@ async function createAndVerify(): Promise<void> {
     })
   );
 
-  // --- read everything back with relations ---
   const loadedTenant = await tenantRepo.findOne({
     where: { id: tenant.id },
     relations: { user: true, pg: true, room: true }

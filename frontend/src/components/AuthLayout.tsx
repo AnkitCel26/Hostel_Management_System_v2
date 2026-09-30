@@ -23,12 +23,6 @@ interface AuthLayoutProps {
   children: ReactNode;
 }
 
-/**
- * Split-screen layout for authentication pages (login, register), mirroring
- * real-world SaaS products: a branded panel (brand mark, homepage headline,
- * value bullets, product preview) on the left, the form column on the right.
- * On mobile only the form column is shown.
- */
 export function AuthLayout({
   icon,
   title,
@@ -59,7 +53,6 @@ export function AuthLayout({
               background: 'linear-gradient(160deg, #1976D2 0%, #1256A0 100%)'
             }}
           >
-            {/* Subtle dot pattern overlay */}
             <Box
               aria-hidden
               sx={{

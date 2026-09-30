@@ -40,18 +40,11 @@ type PgFormData = z.infer<typeof pgSchema>;
 
 interface PgFormDialogProps {
   open: boolean;
-  /** The PG being edited, or null to create a new one. */
   pg: Pg | null;
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/**
- * Create/edit dialog for property records (FR-06, FR-07). Uses React Hook Form
- * + Zod (design system §8). Empty optional fields are sent as '' so the server
- * clears them; required fields are trimmed before submit.
- */
 export function PgFormDialog({ open, pg, onClose, onSaved }: PgFormDialogProps) {
   const isEdit = pg !== null;
   const [serverError, setServerError] = React.useState<string | null>(null);
@@ -69,7 +62,6 @@ export function PgFormDialog({ open, pg, onClose, onSaved }: PgFormDialogProps) 
     defaultValues: { name: '', address: '', city: '', contactNumber: '', description: '' }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -85,8 +77,6 @@ export function PgFormDialog({ open, pg, onClose, onSaved }: PgFormDialogProps) 
 
   const onSubmit = async (data: PgFormData): Promise<void> => {
     setServerError(null);
-    // '' for empty optional fields: the server stores them as null (create) or
-    // clears the previous value (update).
     const input = {
       name: data.name,
       address: data.address,

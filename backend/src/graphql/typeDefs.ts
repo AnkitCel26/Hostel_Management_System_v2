@@ -1,7 +1,4 @@
 // GraphQL schema: Phase 2 base types + Phase 3 authentication operations +
-// Phase 4 PG/room management operations + Phase 5 tenant management operations +
-// Phase 6 rent and payment management operations + Phase 7 complaint management operations +
-// Phase 8 announcement management operations + Phase 9 tenant document operations.
 // Password is intentionally never exposed (FR-34).
 export const typeDefs = `
   type Query {

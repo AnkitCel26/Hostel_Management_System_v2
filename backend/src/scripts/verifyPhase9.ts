@@ -1,15 +1,3 @@
-/**
- * Phase 9 verification: exercises tenant document management through the real
- * GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization (tenant-only reads/writes, guests and admins guarded),
- * input validation (batch bounds, name/URL/number limits, URL format),
- * creation scoping (caller-derived tenant), partial updates, atomic batch
- * deletes, ownership boundaries between tenants, paginated tenant listing,
- * nested resolution, concurrent updates of one document, and a write-invariant
- * integrity sweep. Creates throwaway data and cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase9.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -41,12 +29,6 @@ const ROOMLESS_EMAIL = 'phase9.roomless@hostel.test';
 const TEST_USER_EMAILS = [TEST_ADMIN_EMAIL, ...TENANT_EMAILS, ROOMLESS_EMAIL];
 const NONEXISTENT_ID = '00000000-0000-0000-0000-000000000000';
 
-/**
- * Public base URL for the document bucket, read from SUPABASE_URL
- * (backend/.env). Verification persists real docUrl values, so it must never
- * invent a host — an unconfigured project fails fast here instead of writing
- * dead URLs into the table.
- */
 const STORAGE_BASE = getDocumentsPublicBase();
 if (!STORAGE_BASE) {
   console.error(
@@ -177,7 +159,6 @@ function storageUrl(path: string): string {
   return `${STORAGE_BASE}/${path}`;
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanupTestData(): Promise<void> {
   const userRepo = AppDataSource.getRepository(User);
   const tenantRepo = AppDataSource.getRepository(Tenant);
@@ -243,7 +224,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // --- throwaway users (auth flows are Phase 3 and already verified) ---
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -273,7 +253,6 @@ async function main(): Promise<void> {
     const roomlessUser = await createTestUser('Roomless Tenant', ROOMLESS_EMAIL);
     const asTenant = (user: User): AuthUser => ({ id: user.id, role: 'Tenant' });
 
-    // --- PGs, a room, and tenants (Phase 4/5 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
       field<PgShape>(
         await exec(CREATE_PG, { input: { name, address: `${name} address` } }, asAdmin),
@@ -343,7 +322,6 @@ async function main(): Promise<void> {
         'getTenantDocuments'
       );
 
-    // --- authorization (FR-33: every operation is tenant-only) ---
     expectError('guest cannot list tenant documents', await exec(GET_TENANT_DOCUMENTS, {}), 'FORBIDDEN');
     expectError(
       'guest cannot upload documents',
@@ -388,7 +366,6 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- uploadTenantDocs validation (FR-29) ---
     expectError(
       'uploadTenantDocs rejects an empty batch',
       await exec(UPLOAD_TENANT_DOCS, { input: { docs: [] } }, asTenant(rahulUser)),
@@ -502,7 +479,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- uploadTenantDocs (FR-29): scoping, trimming, batch order ---
     const uploaded = await uploadDocs([
       {
         docName: '  Aadhaar card  ',
@@ -537,7 +513,6 @@ async function main(): Promise<void> {
     )[0];
     check("another tenant's upload attaches their own tenant", priyaDoc.tenant?.id !== rahulTenant.id, true);
 
-    // --- getTenantDocuments: scoping, order, pagination (FR-28) ---
     const rahulList = await listDocs();
     check('the list counts the tenant documents', rahulList.total, 4);
     check('the list never leaks another tenant', rahulList.items.every((i) => i.tenant?.id === rahulTenant.id), true);
@@ -590,15 +565,12 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- updateTenantDocs validation (FR-29) ---
     const aadhaar = uploaded[0];
     expectError(
       'updateTenantDocs rejects an unknown id',
       await exec(UPDATE_TENANT_DOCS, { id: NONEXISTENT_ID, input: { docName: 'x' } }, asTenant(rahulUser)),
       'NOT_FOUND'
     );
-    // A malformed id must be reported like any other unknown id, never as an
-    // internal server error from the uuid column.
     expectError(
       'updateTenantDocs rejects a malformed id',
       await exec(UPDATE_TENANT_DOCS, { id: 'not-a-uuid', input: { docName: 'x' } }, asTenant(rahulUser)),
@@ -637,7 +609,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- updateTenantDocs (FR-29): partial updates, clearing, ownership kept ---
     const renamed = await updateDoc(aadhaar.id, {
       docName: '  Aadhaar card (updated)  ',
       docNumber: 'UID-9999'
@@ -659,8 +630,6 @@ async function main(): Promise<void> {
     });
     check('the docUrl update trims and replaces the value', reattached.docUrl, storageUrl(`${rahulUser.id}/aadhaar-v2.pdf`));
 
-    // --- concurrent updates of one document serialize (row lock) ---
-    // Two disjoint-field updates racing: both must land, with no lost update.
     const raced = uploaded[2];
     const [racedName, racedNumber] = await Promise.all([
       exec(UPDATE_TENANT_DOCS, { id: raced.id, input: { docName: 'raced passport' } }, asTenant(rahulUser)),
@@ -678,7 +647,6 @@ async function main(): Promise<void> {
     check('the raced document kept the docName', racedDoc.docName, 'raced passport');
     check('the raced document kept the docNumber', racedDoc.docNumber, 'raced-number');
 
-    // --- deleteTenantDocuments validation (FR-30) ---
     expectError(
       'deleteTenantDocuments rejects an empty id batch',
       await exec(DELETE_TENANT_DOCUMENTS, { ids: [] }, asTenant(rahulUser)),
@@ -726,7 +694,6 @@ async function main(): Promise<void> {
     const priyaStillThere = await listDocs({}, asTenant(priyaUser));
     check("the foreign document survived the failed batch", priyaStillThere.total, 1);
 
-    // --- deleteTenantDocuments (FR-30): single, duplicates, batch ---
     check('a single-document delete succeeds', await deleteDocs([aadhaar.id]), true);
     const afterSingle = await listDocs();
     check('the single delete removed the document', afterSingle.items.some((i) => i.id === aadhaar.id), false);
@@ -749,7 +716,6 @@ async function main(): Promise<void> {
 
     check("a tenant deletes their own document", await deleteDocs([priyaDoc.id], asTenant(priyaUser)), true);
 
-    // --- nested resolution through the relation field resolvers ---
     await uploadDocs([
       { docName: 'Nested Aadhaar', docUrl: storageUrl(`${rahulUser.id}/nested-aadhaar.pdf`), docNumber: 'NEST-1' }
     ]);
@@ -773,7 +739,6 @@ async function main(): Promise<void> {
     check('Tenant.documents resolves through the admin list', rahulRow.documents.length, 1);
     check('the nested document carries its docName', rahulRow.documents[0].docName, 'Nested Aadhaar');
 
-    // --- write-invariant integrity sweep ---
     const documentRepo = AppDataSource.getRepository(TenantDocument);
     const testDocuments = await documentRepo
       .createQueryBuilder('document')

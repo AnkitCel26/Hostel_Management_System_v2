@@ -1,15 +1,3 @@
-/**
- * Phase 7 verification: exercises complaint management through the real
- * GraphQL layer (same typeDefs/resolvers the Express app serves) —
- * authorization (tenant files, admin updates, both roles guarded), input
- * validation, status/resolvedAt derivation (system-managed resolvedAt set
- * on resolved, cleared on reopen), searchable/filterable/paginated admin
- * listing, tenant-scoped listing, nested resolution, concurrent updates of
- * one complaint, and a write-invariant integrity sweep. Creates throwaway
- * data and cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase7.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -170,20 +158,10 @@ function check(label: string, actual: unknown, expected: unknown): void {
   console.log(`PASS: ${label}`);
 }
 
-/**
- * The database is shared with the app's other data (e.g. the demo seed), so
- * an unscoped count is only meaningful as a change from a baseline taken
- * before this script creates its own complaints. Assertions scoped by pgId,
- * tenantId, or search term stay absolute.
- */
 function checkDelta(label: string, after: number, before: number, added: number): void {
   check(`${label} (+${added})`, after - before, added);
 }
 
-/**
- * Global complaint counts by status, used as the delta baseline. The three
- * counts are independent, so they run together.
- */
 async function countByStatus(): Promise<Record<'open' | 'in_progress' | 'resolved', number>> {
   const repo = AppDataSource.getRepository(Complaint);
   const [open, inProgress, resolved] = await Promise.all([
@@ -225,7 +203,6 @@ function expectError(label: string, result: GqlResult, code: string): void {
   console.log(`PASS: ${label}`);
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanupTestData(): Promise<void> {
   const userRepo = AppDataSource.getRepository(User);
   const tenantRepo = AppDataSource.getRepository(Tenant);
@@ -241,7 +218,6 @@ async function cleanupTestData(): Promise<void> {
       where: users.map((user) => ({ user: { id: user.id } }))
     });
     if (tenants.length > 0) {
-      // Complaints reference tenants and PGs — delete them before their tenants.
       await complaintRepo
         .createQueryBuilder()
         .delete()
@@ -291,7 +267,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // --- throwaway users (auth flows are Phase 3 and already verified) ---
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -326,7 +301,6 @@ async function main(): Promise<void> {
     const roomlessUser = await createTestUser('Roomless Tenant', ROOMLESS_EMAIL);
     const asTenant = (user: User): AuthUser => ({ id: user.id, role: 'Tenant' });
 
-    // --- PGs, a room, and tenants (Phase 4/5 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
       field<PgShape>(
         await exec(CREATE_PG, { input: { name, address: `${name} address` } }, asAdmin),
@@ -375,7 +349,6 @@ async function main(): Promise<void> {
     ): Promise<ComplaintShape> =>
       field<ComplaintShape>(await exec(UPDATE_COMPLAINT, { id, input }, user), 'updateComplaint');
 
-    // --- authorization (FR-33: both roles guarded at the resolver) ---
     expectError('guest cannot list complaints', await exec(GET_COMPLAINTS, {}), 'FORBIDDEN');
     expectError(
       'guest cannot read the tenant complaint list',
@@ -420,7 +393,6 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- createComplaint validation (FR-22) ---
     expectError(
       'createComplaint rejects an empty title',
       await exec(CREATE_COMPLAINT, { input: { title: '', description: 'A problem' } }, asTenant(rahulUser)),
@@ -464,7 +436,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- createComplaint (FR-22): scoping, defaults, trimming ---
     const c1 = await createComplaint(
       { title: '  Water leak in the bathroom  ', description: '  Water pools near the shower every morning.  ' },
       asTenant(rahulUser)
@@ -502,14 +473,11 @@ async function main(): Promise<void> {
       160
     );
 
-    // --- updateComplaint validation and resolvedAt derivation (FR-24) ---
     expectError(
       'updateComplaint rejects an unknown id',
       await exec(UPDATE_COMPLAINT, { id: NONEXISTENT_ID, input: { status: 'resolved' } }, asAdmin),
       'NOT_FOUND'
     );
-    // A malformed id must be reported like any other unknown id, never as an
-    // internal server error from the uuid column.
     expectError(
       'updateComplaint rejects a malformed id',
       await exec(UPDATE_COMPLAINT, { id: 'not-a-uuid', input: { status: 'resolved' } }, asAdmin),
@@ -558,8 +526,6 @@ async function main(): Promise<void> {
     const c3Updated = await updateComplaint(c3.id, { status: 'in_progress' });
     check('the priya complaint moves to in_progress', c3Updated.status, 'in_progress');
 
-    // --- concurrent updates of one complaint serialize (row lock) ---
-    // Two disjoint-field updates racing: both must land, with no lost update.
     const [racedTitle, racedStatus] = await Promise.all([
       exec(UPDATE_COMPLAINT, { id: c4.id, input: { title: 'raced title' } }, asAdmin),
       exec(UPDATE_COMPLAINT, { id: c4.id, input: { status: 'in_progress' } }, asAdmin)
@@ -580,10 +546,6 @@ async function main(): Promise<void> {
     check('the raced complaint kept the status', racedComplaint.status, 'in_progress');
     check('the raced complaint has no resolvedAt', racedComplaint.resolvedAt, null);
 
-    // --- getAllComplaints: totals, filters, search, pagination (FR-23) ---
-    // Final state: c1 resolved, c2 open (reworded), c3 in_progress, c4
-    // in_progress (raced), plus the long-title complaint (open, beta): +5
-    // unscoped over the baseline.
     const globalPage = field<ComplaintPageShape>(await exec(GET_COMPLAINTS, {}, asAdmin), 'getAllComplaints');
     checkDelta('the complaint list reports the global total', globalPage.total, baselineTotal, 5);
     check('the complaint list defaults to limit 20', globalPage.limit, 20);
@@ -654,9 +616,6 @@ async function main(): Promise<void> {
       true
     );
 
-    // The search terms are unique to this script's fixtures, but each search
-    // is still scoped to a test property so the expected totals stay exact
-    // regardless of what other data shares the database.
     const byTitle = field<ComplaintPageShape>(
       await exec(GET_COMPLAINTS, { search: 'water leak', pgId: alpha.id }, asAdmin),
       'getAllComplaints'
@@ -700,8 +659,6 @@ async function main(): Promise<void> {
     check('the complaint list paginates items', limited.items.length, 2);
     checkDelta('the complaint list reports the total across pages', limited.total, baselineTotal, 5);
     check('the complaint list echoes limit/offset', `${limited.limit}/${limited.offset}`, '2/0');
-    // The final page offset depends on the real global total, so it is
-    // derived rather than hard-coded.
     const tail = field<ComplaintPageShape>(
       await exec(GET_COMPLAINTS, { limit: 2, offset: globalPage.total - 1 }, asAdmin),
       'getAllComplaints'
@@ -744,7 +701,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- getTenantComplaints: tenant-scoped (FR-23) ---
     const rahulList = field<ComplaintPageShape>(
       await exec(GET_TENANT_COMPLAINTS, {}, asTenant(rahulUser)),
       'getTenantComplaints'
@@ -779,7 +735,6 @@ async function main(): Promise<void> {
     check('a user without a tenant record gets an empty page', roomlessList.total, 0);
     check('the empty complaint page has no items', roomlessList.items.length, 0);
 
-    // --- nested resolution through the relation field resolvers ---
     const deep = field<{ items: DeepComplaintShape[] }>(
       await exec(GET_COMPLAINTS_DEEP, { search: 'water leak' }, asAdmin),
       'getAllComplaints'
@@ -807,7 +762,6 @@ async function main(): Promise<void> {
     if (!priyaTenant) throw new Error('Priya was not returned');
     check('Tenant.complaints resolves the tenant own complaints', priyaTenant.complaints.length, 1);
 
-    // --- write-invariant integrity sweep ---
     const complaintRepo = AppDataSource.getRepository(Complaint);
     const testComplaints = await complaintRepo
       .createQueryBuilder('complaint')

@@ -5,11 +5,6 @@ interface DetailLabelProps {
   children: ReactNode;
 }
 
-/**
- * The app's "one fact" label: small, uppercase, letter-spaced and muted. Used
- * above every value on the property/room detail surfaces so those panels read
- * as one spec sheet instead of a mix of body sizes.
- */
 export function DetailLabel({ children }: DetailLabelProps) {
   return (
     <Typography

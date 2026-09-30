@@ -44,7 +44,6 @@ export class Tenant {
   @JoinColumn({ name: 'userId' })
   user!: User;
 
-  // Tenant * ─ 1 Pg
   @ManyToOne(() => Pg, (pg) => pg.tenants, { nullable: false })
   pg!: Pg;
 
@@ -52,15 +51,12 @@ export class Tenant {
   @ManyToOne(() => Room, (room) => room.tenants, { nullable: true })
   room?: Room | null;
 
-  // Tenant 1 ─ * TenantDocument
   @OneToMany(() => TenantDocument, (document) => document.tenant)
   documents?: TenantDocument[];
 
-  // Tenant 1 ─ * RentPayment
   @OneToMany(() => RentPayment, (payment) => payment.tenant)
   payments?: RentPayment[];
 
-  // Tenant 1 ─ * Complaint
   @OneToMany(() => Complaint, (complaint) => complaint.tenant)
   complaints?: Complaint[];
 }

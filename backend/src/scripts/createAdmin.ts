@@ -1,9 +1,3 @@
-/**
- * Dev utility: creates (or promotes) an Admin user.
- * Needed because public registration only ever creates Tenant users.
- *
- * Usage: npm run seed:admin -- <email> <password> [name]
- */
 import 'reflect-metadata';
 import { AppDataSource } from '../config/db';
 import { User, UserRole } from '../entities/user.entity';

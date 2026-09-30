@@ -12,11 +12,6 @@ interface OccupancyChartProps {
   emptyState: React.ReactNode;
 }
 
-/**
- * Bed occupancy per property (design system §6 "Charts"). Bars use the theme's
- * primary color, so the chart follows the app palette automatically instead of
- * introducing a second one.
- */
 export function OccupancyChart({ properties, loading, emptyState }: OccupancyChartProps) {
   const theme = useTheme();
   // Properties with no beds cannot be plotted, so they are left out of the
@@ -62,8 +57,6 @@ export function OccupancyChart({ properties, loading, emptyState }: OccupancyCha
             borderRadius={6}
             margin={{ top: 16, right: 8, bottom: 8, left: 0 }}
             grid={{ horizontal: true }}
-            // A single-series bar chart needs no legend; the panel title and
-            // the axis already say what the bars are.
             slotProps={{ legend: { hidden: true } }}
             aria-label="Occupancy percentage by property"
           />

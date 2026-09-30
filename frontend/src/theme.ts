@@ -1,8 +1,5 @@
 import { createTheme } from '@mui/material/styles';
 
-// Theme implements the UI/UX Design System defined in the MRD.
-// Every module (Admin + Tenant) must use this single theme —
-// no per-module palettes or visual styles.
 export const theme = createTheme({
   palette: {
     primary: { main: '#1976D2' },
@@ -15,13 +12,11 @@ export const theme = createTheme({
     divider: 'rgba(31, 41, 55, 0.08)'
   },
   shape: {
-    // Unified geometry: 8px controls, 12px surfaces (see MuiCard below).
     borderRadius: 8
   },
   typography: {
     // Inter is loaded in index.html.
     fontFamily: '"Inter", "Helvetica Neue", Arial, sans-serif',
-    // Design system: page heading large + bold, section heading medium + semi-bold.
     h1: { fontWeight: 700, fontSize: '2.5rem', lineHeight: 1.15, letterSpacing: '-0.02em' },
     h2: { fontWeight: 700, fontSize: '2rem', lineHeight: 1.2, letterSpacing: '-0.015em' },
     h3: { fontWeight: 700 },
@@ -39,7 +34,6 @@ export const theme = createTheme({
         }
       }
     },
-    // Consistent, visible focus ring for keyboard users.
     MuiButtonBase: {
       styleOverrides: {
         root: {

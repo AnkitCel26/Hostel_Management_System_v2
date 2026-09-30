@@ -52,7 +52,6 @@ interface EditProfileDialogProps {
   onClose: () => void;
 }
 
-/** Edit-profile dialog: opened from the edit icon on the profile card. */
 function EditProfileDialog({ open, user, onClose }: EditProfileDialogProps) {
   const { updateProfile } = useAuth();
   const { success } = useSnackbar();
@@ -68,7 +67,6 @@ function EditProfileDialog({ open, user, onClose }: EditProfileDialogProps) {
     defaultValues: { name: user.name, phone: user.phone ?? '' }
   });
 
-  // Load the current values each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -136,7 +134,6 @@ interface DetailItemProps {
   value: string;
 }
 
-/** One labeled fact with the homepage's tinted icon-badge styling. */
 function DetailItem({ icon, label, value }: DetailItemProps) {
   return (
     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
@@ -167,11 +164,6 @@ function DetailItem({ icon, label, value }: DetailItemProps) {
   );
 }
 
-/**
- * Profile page (/profile): identity header card with edit + logout actions
- * (no separate edit section — editing happens in a dialog), followed by an
- * account-details grid.
- */
 export function ProfilePage() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
@@ -200,7 +192,6 @@ export function ProfilePage() {
 
   return (
     <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-      {/* Identity header */}
       <Card>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Stack
@@ -265,7 +256,6 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Account details */}
       <Card sx={{ mt: 3 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h6" component="h2" gutterBottom>

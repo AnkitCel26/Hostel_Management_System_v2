@@ -46,7 +46,6 @@ interface GetAllPgsRoomsData {
 /** Rooms rendered inside a property card; the rest collapse into a "more" link. */
 const MAX_VISIBLE_ROOMS = 6;
 
-/** Card lift + border tint on hover — the homepage hover treatment. */
 const cardHoverSx: SxProps<Theme> = {
   transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
   '&:hover': {
@@ -56,7 +55,6 @@ const cardHoverSx: SxProps<Theme> = {
   }
 };
 
-/** Bordered icon button — same treatment as the room and profile page actions. */
 const actionIconSx: SxProps<Theme> = {
   border: 1,
   borderColor: 'divider',
@@ -67,7 +65,6 @@ const actionIconSx: SxProps<Theme> = {
   '&:hover': { bgcolor: 'action.hover', borderColor: 'primary.main', color: 'primary.main' }
 };
 
-/** Primary gradient panel shared by the overview header and its loading state. */
 const heroSx: SxProps<Theme> = {
   mb: 3,
   color: 'common.white',
@@ -85,7 +82,6 @@ const heroContentSx: SxProps<Theme> = {
   '&:last-child': { pb: { xs: 3, md: 4 } }
 };
 
-/** Screen-reader-only text (status announcements for loading). */
 const visuallyHiddenSx: SxProps<Theme> = {
   position: 'absolute',
   width: 1,
@@ -102,7 +98,6 @@ function occupancyTone(percent: number): 'primary' | 'warning' | 'error' {
   return 'primary';
 }
 
-/** Small uppercase label used for card sections (matches the sidebar subheads). */
 function Overline({ children }: { children: ReactNode }) {
   return (
     <Typography
@@ -122,7 +117,6 @@ function Overline({ children }: { children: ReactNode }) {
   );
 }
 
-/** Icon + text metadata line (address, phone). */
 function MetaItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
@@ -143,10 +137,6 @@ function MetaItem({ icon, children }: { icon: ReactNode; children: ReactNode }) 
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Overview header                                                            */
-/* -------------------------------------------------------------------------- */
-
 interface PortfolioHeroProps {
   propertyCount: number;
   occupancyPercent: number;
@@ -155,7 +145,6 @@ interface PortfolioHeroProps {
   onCreate: () => void;
 }
 
-/** Gradient overview band: page title, primary action, and portfolio occupancy. */
 function PortfolioHero({
   propertyCount,
   occupancyPercent,
@@ -211,7 +200,6 @@ function PortfolioHero({
             </Button>
           </Box>
 
-          {/* Occupancy gauge — hidden on phones where the stat row carries it. */}
           <Stack
             direction="row"
             spacing={3}
@@ -271,15 +259,10 @@ function PortfolioHero({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Property card                                                              */
-/* -------------------------------------------------------------------------- */
-
 interface RoomTileProps {
   room: Room;
 }
 
-/** One room inside a property card: identity, rent, occupancy status. */
 function RoomTile({ room }: RoomTileProps) {
   return (
     <Box
@@ -316,7 +299,6 @@ interface PropertyCardProps {
   onEdit: (pg: Pg) => void;
 }
 
-/** One property card: identity, contact, occupancy, and its rooms (FR-08, FR-11). */
 function PropertyCard({ pg, onEdit }: PropertyCardProps) {
   const rooms: Room[] = pg.rooms ?? [];
   const totalCapacity = rooms.reduce((sum, room) => sum + room.capacity, 0);
@@ -334,7 +316,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
       <CardContent
         sx={{ p: 2.5, flexGrow: 1, display: 'flex', flexDirection: 'column', pb: 2.5 }}
       >
-        {/* Identity */}
         <Stack direction="row" spacing={1.5} alignItems="flex-start">
           <Box
             sx={{
@@ -390,7 +371,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
           </Typography>
         ) : null}
 
-        {/* Contact meta */}
         <Box
           sx={{
             mt: 2,
@@ -410,7 +390,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
           ) : null}
         </Box>
 
-        {/* Occupancy summary */}
         <Box sx={{ mt: 2.5 }}>
           <Stack
             direction="row"
@@ -446,7 +425,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
 
         <Divider sx={{ my: 2.5 }} />
 
-        {/* Rooms */}
         <Stack
           direction="row"
           justifyContent="space-between"
@@ -497,7 +475,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
         ) : null}
       </CardContent>
 
-      {/* Footer */}
       <Divider />
       <Stack
         direction="row"
@@ -526,10 +503,6 @@ function PropertyCard({ pg, onEdit }: PropertyCardProps) {
     </Card>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Loading state                                                              */
-/* -------------------------------------------------------------------------- */
 
 /** Skeleton that mirrors the page layout so nothing jumps when data arrives. */
 function PageSkeleton() {
@@ -627,16 +600,6 @@ function PageSkeleton() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Page                                                                       */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Admin Property Management page (/admin/properties): a portfolio overview with
- * occupancy, a summary row, and one card per property with its rooms; create
- * and update via the form dialog (FR-06, FR-07, FR-08, FR-11). The domain entity
- * is `Pg` (MRD); the user-facing term is "Property" (see utils/labels).
- */
 export function AdminPgPage() {
   const { data, loading, error, refetch } = useQuery<GetAllPgsRoomsData>(GET_ALL_PGS_ROOMS_QUERY);
   const { success } = useSnackbar();

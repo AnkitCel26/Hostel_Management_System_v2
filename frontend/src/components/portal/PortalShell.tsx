@@ -41,7 +41,6 @@ const MOBILE_DRAWER_WIDTH = 280;
  * edges form one continuous horizontal line across the viewport. */
 const TOPBAR_HEIGHT = 64;
 
-/** Brand block — identical mark and wordmark style as the public header. */
 function PortalBrand({ caption }: { caption: string }) {
   return (
     <Box
@@ -52,10 +51,7 @@ function PortalBrand({ caption }: { caption: string }) {
         display: 'flex',
         alignItems: 'center',
         gap: 1.25,
-        // Matches the top bar height exactly: the divider below this block and
-        // the top bar's bottom border meet in one continuous line.
         height: TOPBAR_HEIGHT,
-        // Aligns the badge with the nav icons below (nav container 12px + item 10px).
         px: 2.75,
         color: 'inherit',
         textDecoration: 'none'
@@ -101,12 +97,6 @@ interface PortalNavListProps {
   onNavigate?: () => void;
 }
 
-/**
- * Sectioned navigation. Follows the compact SaaS pattern (Linear/Stripe):
- * 36px rows, 13px medium-weight labels, 20px icons, muted default color,
- * subtle hover, and a primary-tinted active pill. Typography stays inside
- * the app's Inter scale (theme.ts) — only size/weight are tuned here.
- */
 function PortalNavList({ onNavigate }: PortalNavListProps) {
   const { user } = useAuth();
   const location = useLocation();
@@ -199,7 +189,6 @@ interface SidebarContentProps {
   onLogout: () => void;
 }
 
-/** Shared frame for the small live summary cards pinned above the user block. */
 function InsightCard({ children }: { children: React.ReactNode }) {
   return (
     <Box sx={{ px: 1.5, pb: 1.5 }}>
@@ -218,7 +207,6 @@ function InsightCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Admin glanceable card: live occupancy across all properties. */
 function AdminInsight() {
   const { data } = useQuery<{ getAllPgsRooms: Pg[] }>(GET_ALL_PGS_ROOMS_QUERY);
   const pgs = data?.getAllPgsRooms ?? [];
@@ -271,7 +259,6 @@ function AdminInsight() {
   );
 }
 
-/** Tenant glanceable card: their room and rent at a glance. */
 function TenantInsight() {
   const { data } = useQuery<{ getTenantPgRoom: TenantPgRoom | null }>(GET_TENANT_PG_ROOM_QUERY);
   const assignment = data?.getTenantPgRoom ?? null;
@@ -306,14 +293,12 @@ function TenantInsight() {
   );
 }
 
-/** Role-appropriate live insight pinned above the user block. */
 function SidebarInsight() {
   const { user } = useAuth();
   if (!user) return null;
   return user.role === 'Admin' ? <AdminInsight /> : <TenantInsight />;
 }
 
-/** Full sidebar body: brand, scrollable nav, and the pinned user identity. */
 function SidebarContent({ onNavigate, onLogout }: SidebarContentProps) {
   const { user } = useAuth();
   if (!user) return null;
@@ -386,13 +371,6 @@ function SidebarContent({ onNavigate, onLogout }: SidebarContentProps) {
   );
 }
 
-/**
- * Post-login portal shell (MRD §4/§5): full-height sidebar navigation, sticky
- * top bar with the current page title and account menu, and the main content
- * area. The sidebar collapses into a temporary drawer on smaller screens
- * (MRD §10). Rendered by AppShell for portal routes only — public pages keep
- * the marketing header/footer.
- */
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const location = useLocation();
@@ -410,7 +388,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     navigate('/login', { replace: true });
   };
 
-  // Route guards redirect guests; render content plainly while auth resolves.
   if (!user) {
     return (
       <Box component="main" id="main-content" sx={{ flexGrow: 1, py: { xs: 3, sm: 4 } }}>
@@ -423,7 +400,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* Desktop sidebar */}
       <Box
         component="aside"
         aria-label="Portal sidebar"
@@ -444,7 +420,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         </Box>
       </Box>
 
-      {/* Mobile sidebar drawer */}
       <Drawer
         variant="temporary"
         anchor="left"
@@ -457,7 +432,6 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
         <SidebarContent onNavigate={closeDrawer} onLogout={() => void handleLogout()} />
       </Drawer>
 
-      {/* Content column */}
       <Box
         sx={{
           flexGrow: 1,

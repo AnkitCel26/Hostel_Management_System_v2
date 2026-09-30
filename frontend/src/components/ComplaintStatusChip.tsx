@@ -7,10 +7,6 @@ interface ComplaintStatusPresentation {
   color: 'success' | 'info' | 'warning' | 'error';
 }
 
-/**
- * Status presentation (design system §9). One mapping for every surface —
- * admin table, tenant list, dialogs — so a status always looks the same.
- */
 const STATUS_PRESENTATION: Record<ComplaintStatus, ComplaintStatusPresentation> = {
   open: { label: 'Open', color: 'warning' },
   in_progress: { label: 'In Progress', color: 'info' },

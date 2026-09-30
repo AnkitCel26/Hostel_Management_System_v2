@@ -6,12 +6,6 @@ interface OccupancyChipProps {
   size?: 'small' | 'medium';
 }
 
-/**
- * Consistent occupancy status indicator (FR-11, design system §9):
- * - vacant (0 occupied)  → success
- * - partially occupied   → warning
- * - full (occupied ≥ capacity) → error
- */
 export function OccupancyChip({ occupied, capacity, size = 'small' }: OccupancyChipProps) {
   const safeCapacity = Math.max(capacity, 0);
   const safeOccupied = Math.max(occupied, 0);

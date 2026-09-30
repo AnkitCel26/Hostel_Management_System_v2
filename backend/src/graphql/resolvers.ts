@@ -35,9 +35,6 @@ export const resolvers = {
       if (ctx.user) {
         return authService.getCurrentUser(ctx.user.id);
       }
-      // A present-but-invalid access cookie usually means the session expired.
-      // Surface UNAUTHENTICATED so the client's refresh link can rotate and
-      // retry; with no cookie at all the visitor is simply a guest.
       const cookieName = process.env.JWT_COOKIE_NAME ?? 'hm_access';
       const hasAccessCookie = typeof ctx.req.cookies?.[cookieName] === 'string';
       if (hasAccessCookie) {
@@ -107,8 +104,6 @@ export const resolvers = {
       args: paymentService.PaymentHistoryArgs,
       ctx: GraphQLContext
     ) => {
-      // The service scopes strictly to the caller's own tenant record — no
-      // tenantId is accepted from input (FR-23/FR-20 role boundary).
       const user = requireTenant(ctx);
       return paymentService.getRentPaymentHistory(user.id, args);
     },
@@ -136,8 +131,6 @@ export const resolvers = {
       args: complaintService.ComplaintHistoryArgs,
       ctx: GraphQLContext
     ) => {
-      // The service scopes strictly to the caller's own tenant record — no
-      // tenantId is accepted from input (FR-23 role boundary).
       const user = requireTenant(ctx);
       return complaintService.getTenantComplaints(user.id, args);
     },
@@ -156,8 +149,6 @@ export const resolvers = {
       args: announcementService.AnnouncementHistoryArgs,
       ctx: GraphQLContext
     ) => {
-      // The service scopes strictly to the caller's own PG — no pgId is
-      // accepted from input (FR-27 role boundary).
       const user = requireTenant(ctx);
       return announcementService.getTenantPgAnnouncements(user.id, args);
     },
@@ -167,8 +158,6 @@ export const resolvers = {
       args: documentService.DocumentListArgs,
       ctx: GraphQLContext
     ) => {
-      // The service scopes strictly to the caller's own tenant record — no
-      // tenantId is accepted from input (FR-28 role boundary).
       const user = requireTenant(ctx);
       return documentService.getTenantDocuments(user.id, args);
     },
@@ -179,7 +168,6 @@ export const resolvers = {
       ctx: GraphQLContext
     ) => {
       requireAdmin(ctx);
-      // The service aggregates and validates; the resolver only authorizes.
       return dashboardService.getAdminDashboardStats(
         { pgId: args.pgId ?? null },
         { limit: args.recentLimit ?? null }
@@ -292,8 +280,6 @@ export const resolvers = {
       args: { input: paymentService.PayRentInput },
       ctx: GraphQLContext
     ) => {
-      // Ownership of the payment is verified inside the service (the
-      // tenant's own record is the only one payable).
       const user = requireTenant(ctx);
       return paymentService.payRent(user.id, args.input);
     },
@@ -303,8 +289,6 @@ export const resolvers = {
       args: { input: complaintService.CreateComplaintInput },
       ctx: GraphQLContext
     ) => {
-      // The service derives the tenant and PG from the caller — a tenant can
-      // never file a complaint against another tenant's PG (FR-22).
       const user = requireTenant(ctx);
       return complaintService.createComplaint(user.id, args.input);
     },
@@ -323,8 +307,6 @@ export const resolvers = {
       args: { input: announcementService.CreateAnnouncementInput },
       ctx: GraphQLContext
     ) => {
-      // The service derives the creator from the caller — an announcement
-      // can never be attributed to another user (FR-25).
       const user = requireAdmin(ctx);
       return announcementService.createAnnouncement(user.id, args.input);
     },
@@ -343,8 +325,6 @@ export const resolvers = {
       args: { input: documentService.UploadTenantDocsInput },
       ctx: GraphQLContext
     ) => {
-      // The service derives the tenant from the caller — a document can
-      // never be recorded against another tenant's record (FR-29).
       const user = requireTenant(ctx);
       return documentService.uploadTenantDocs(user.id, args.input);
     },
@@ -354,9 +334,6 @@ export const resolvers = {
       args: { id: string; input: documentService.UpdateTenantDocsInput },
       ctx: GraphQLContext
     ) => {
-      // The service verifies the document belongs to the caller's own
-      // tenant record — one tenant can never change another tenant's
-      // document (FR-29 role boundary).
       const user = requireTenant(ctx);
       return documentService.updateTenantDocs(user.id, args.id, args.input);
     },
@@ -366,17 +343,11 @@ export const resolvers = {
       args: { ids: string[] },
       ctx: GraphQLContext
     ) => {
-      // The service verifies every document belongs to the caller's own
-      // tenant record, and the batch is all-or-nothing (FR-30).
       const user = requireTenant(ctx);
       return documentService.deleteTenantDocuments(user.id, args.ids);
     }
   },
 
-  // Serialize entity dates as ISO strings for the String! schema fields, and
-  // resolve entity relations on demand. Services pre-load the relations their
-  // own operations return; these resolvers cover every other reachable path
-  // (prefer an already-loaded relation, otherwise re-fetch via the service).
   User: {
     createdAt: (parent: User) => parent.createdAt.toISOString(),
     updatedAt: (parent: User) => parent.updatedAt.toISOString(),
@@ -433,10 +404,6 @@ export const resolvers = {
   },
 
   RentPayment: {
-    // Live status: a payment's status can change as time passes (a pending
-    // payment silently becomes overdue after its due date) with no write. The
-    // stored value is only the snapshot from the last write; the response
-    // always shows the truth.
     status: (parent: RentPayment) => paymentService.resolvePaymentStatus(parent),
     createdAt: (parent: RentPayment) => parent.createdAt.toISOString(),
     updatedAt: (parent: RentPayment) => parent.updatedAt.toISOString(),

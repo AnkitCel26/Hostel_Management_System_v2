@@ -22,15 +22,6 @@ interface Slice {
   color: 'success' | 'info' | 'warning' | 'error';
 }
 
-/**
- * Payment status split (design system §6 "Charts"). Slice colors reuse the
- * exact palette entries `PaymentStatusChip` uses for each status, so a status
- * looks the same whether it appears as a chip, a chart slice, or a legend row.
- *
- * The legend is rendered as plain rows instead of the library's legend so the
- * counts stay readable and the whole panel matches the card styling used
- * everywhere else.
- */
 export function PaymentStatusChart({
   paidCount,
   partialCount,
@@ -64,8 +55,6 @@ export function PaymentStatusChart({
           <PieChart
             series={[
               {
-                // The API sends counts, not percentages, and pie ids must be
-                // strings, so the array index is used as the id.
                 data: active.map((slice, index) => ({ id: String(index), value: slice.value })),
                 innerRadius: 52,
                 outerRadius: 88,
@@ -81,8 +70,6 @@ export function PaymentStatusChart({
             margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
             aria-label="Rent payments by status"
           />
-          {/* Centered total, so the donut reads as a proportion of something
-              rather than a bare ring. */}
           {total > 0 ? (
             <Box
               sx={{

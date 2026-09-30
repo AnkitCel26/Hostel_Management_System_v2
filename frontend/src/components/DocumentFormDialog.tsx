@@ -39,7 +39,6 @@ import { formatDate } from '../utils/format';
 const DOC_NAME_MAX = 120;
 const DOC_NUMBER_MAX = 60;
 
-/** Storage failures are Errors; give them a message that reads like the rest. */
 const documentSchema = z.object({
   docName: z
     .string()
@@ -56,30 +55,17 @@ type DocumentFormData = z.infer<typeof documentSchema>;
 
 interface DocumentFormDialogProps {
   open: boolean;
-  /**
-   * `create` uploads a new file and records it; `update` edits the metadata of
-   * an existing document and can optionally replace its file.
-   */
   mode: 'create' | 'update';
-  /** The document being updated; ignored in create mode. */
   document?: TenantDocument | null;
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/** Turns a storage or GraphQL failure into a message safe to show inline. */
 function getFailureMessage(error: unknown, fallback: string): string {
   if (error instanceof DocumentStorageError) return error.message;
   return getGraphQLErrorMessage(error, fallback);
 }
 
-/**
- * Tenant document form (Phase 9, FR-29). The file is uploaded to Supabase
- * storage first and only its URL and metadata are recorded through the
- * backend, so the database never stores file bytes. The tenant itself is
- * always derived by the server from the caller.
- */
 export function DocumentFormDialog({
   open,
   mode,
@@ -95,14 +81,8 @@ export function DocumentFormDialog({
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [serverError, setServerError] = React.useState<string | null>(null);
 
-  // Storage is only needed when a file is written: a create always uploads,
-  // and an update only uploads when the file is being replaced. Renaming or
-  // renumbering an existing record is pure metadata and must stay possible
-  // while storage is not configured.
   const needsStorage = !isEdit || file !== null;
 
-  // No refetchQueries: the parent refetches its own query in onSaved, and
-  // returned TenantDocument entities merge into the Apollo cache by id.
   const [uploadTenantDocs] = useMutation(UPLOAD_TENANT_DOCS_MUTATION);
   const [updateTenantDocs] = useMutation(UPDATE_TENANT_DOCS_MUTATION);
 
@@ -119,7 +99,6 @@ export function DocumentFormDialog({
     defaultValues: { docName: '', docNumber: '' }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -134,7 +113,6 @@ export function DocumentFormDialog({
 
   const docNameValue = watch('docName');
   const docNumberValue = watch('docNumber');
-  // While a new file is chosen, its own name is the suggested document name.
   const fileIsNamed = !isEdit && (docNameValue ?? '').trim() === '';
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -147,7 +125,6 @@ export function DocumentFormDialog({
     const problem = getDocumentFileError(selected);
     setFileError(problem);
     if (!problem && fileIsNamed) {
-      // Name the document after the file until the tenant types their own.
       setValue('docName', selected.name, { shouldValidate: false });
       void trigger('docName');
     }
@@ -159,7 +136,6 @@ export function DocumentFormDialog({
       return;
     }
 
-    // Re-check the file here: a dialog can be reopened with a stale error.
     const problem = isEdit && !file ? null : getDocumentFileError(file);
     if (problem) {
       setFileError(problem);
@@ -187,8 +163,6 @@ export function DocumentFormDialog({
           }
         });
         if (uploadedUrl && uploadedUrl !== document.docUrl) {
-          // The record now points at the new file; drop the replaced one.
-          // Best effort only — a leftover old file must not fail the update.
           void removeDocumentFile(document.docUrl).catch(() => undefined);
         }
         onSaved(`"${data.docName}" updated.`);
@@ -216,7 +190,6 @@ export function DocumentFormDialog({
       }
     } catch (error) {
       if (uploadedUrl) {
-        // The record was never written, so the storage object is an orphan.
         void removeDocumentFile(uploadedUrl).catch(() => undefined);
       }
       setServerError(

@@ -73,7 +73,6 @@ interface GetAllTenantsData {
   getAllTenants: TenantPage;
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -86,7 +85,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the rooms and tenants pages. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -94,7 +92,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/** How many months back the month picker offers, including the current one. */
 const MONTH_OPTIONS_COUNT = 18;
 
 interface MonthOption {
@@ -102,11 +99,6 @@ interface MonthOption {
   label: string;
 }
 
-/**
- * The billing months offered in the month picker: the current month first, then
- * the previous MONTH_OPTIONS_COUNT - 1 months, newest to oldest. Rent is billed
- * in advance, so the picker only ever looks back from today.
- */
 const MONTH_OPTIONS: MonthOption[] = Array.from({ length: MONTH_OPTIONS_COUNT }, (_, index) => {
   const now = new Date();
   const value = new Date(now.getFullYear(), now.getMonth() - index, 1);
@@ -133,7 +125,6 @@ export function AdminPaymentsPage() {
     payment: null
   });
 
-  // Filters returning to their default values restart pagination.
   React.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, pgFilter, statusFilter, monthFilter]);
@@ -154,19 +145,14 @@ export function AdminPaymentsPage() {
       notifyOnNetworkStatusChange: true
     }
   );
-  // The summary follows the property and month filters so the cards always
-  // describe the same slice of data the table is showing.
   const summaryQuery = useQuery<GetRentSummaryData>(GET_ADMIN_RENT_SUMMARY_QUERY, {
     variables: { pgId: pgFilter === '' ? undefined : pgFilter, month: monthVariable }
   });
   const pgsQuery = useQuery<GetAllPgsData>(GET_ALL_PGS_QUERY);
-  // Tenants for the form's picker (the list API is paginated; 100 covers the
-  // picker for any realistic property count this phase supports).
   const tenantsQuery = useQuery<GetAllTenantsData>(GET_ALL_TENANTS_QUERY, {
     variables: { limit: 100 }
   });
 
-  // Keep the previous page visible while a refetch is in flight (no flicker).
   const paymentPage = data?.getAllRentPayments ?? previousData?.getAllRentPayments ?? null;
   const payments = paymentPage?.items ?? [];
   const total = paymentPage?.total ?? 0;
@@ -174,11 +160,8 @@ export function AdminPaymentsPage() {
     summaryQuery.previousData?.getAdminRentSummary ?? null;
   const pgs = pgsQuery.data?.getAllPgs ?? [];
   const tenants = tenantsQuery.data?.getAllTenants.items ?? [];
-  // The month scope is part of the toolbar, so it counts as an active filter
-  // except in its default state (all months).
   const hasActiveFilters =
     trimmedSearch !== '' || pgFilter !== '' || statusFilter !== '' || monthFilter !== '';
-  /** "September 2026" for a month scope, "all months" otherwise. */
   const monthScopeLabel = monthFilter === '' ? 'all months' : formatMonth(monthFilter);
 
   const openCreate = () => setDialog({ open: true, payment: null });
@@ -188,9 +171,6 @@ export function AdminPaymentsPage() {
   const handleSaved = (message: string): void => {
     closeDialog();
     success(message);
-    // Apollo refetches with the current variables, so a payment saved outside
-    // the active month/property scope simply does not appear in the table —
-    // the same as any other filter combination.
     void refetch();
     void summaryQuery.refetch();
   };
@@ -214,7 +194,6 @@ export function AdminPaymentsPage() {
         }
       />
 
-      {/* Summary cards describe the current filter scope (property + billing month). */}
       {summary ? (
         <Box
           sx={{
@@ -255,7 +234,6 @@ export function AdminPaymentsPage() {
         </Box>
       ) : null}
 
-      {/* Toolbar */}
       <Card sx={{ mb: 3 }}>
         <CardContent
           sx={{

@@ -3,20 +3,12 @@ import { Box, Card, CardContent, Typography } from '@mui/material';
 
 interface DashboardSectionProps {
   title: string;
-  /** Short supporting line under the title. */
   subtitle?: string;
-  /** Optional right-aligned control (a link, filter, or legend). */
   action?: ReactNode;
   children: ReactNode;
-  /** Removes the body padding, for panels that host a full-bleed table. */
   disablePadding?: boolean;
 }
 
-/**
- * Titled panel used for every dashboard block (charts, recent activity, quick
- * links). One panel frame keeps the dashboards visually consistent with the
- * management pages, which use the same Card border/radius from the theme.
- */
 export function DashboardSection({
   title,
   subtitle,

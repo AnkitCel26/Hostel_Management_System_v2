@@ -8,18 +8,9 @@ interface EmptyStateProps {
   message?: string;
   /** Optional call-to-action rendered below the message. */
   action?: ReactNode;
-  /**
-   * Tightens the vertical padding for an empty state that lives inside a
-   * dashboard panel, where the full-size version would make the panel taller
-   * than its neighbours in the same row.
-   */
   compact?: boolean;
 }
 
-/**
- * Consistent empty state for data-driven pages (UI/UX design system §11):
- * tinted icon badge, title, supporting message, and an optional action.
- */
 export function EmptyState({ icon, title, message, action, compact = false }: EmptyStateProps) {
   return (
     <Box

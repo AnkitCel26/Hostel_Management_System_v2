@@ -4,64 +4,27 @@ import { AppDataSource } from '../../config/db';
 import { Tenant } from '../../entities/tenant.entity';
 import { TenantDocument } from '../../entities/tenant_docs.entity';
 
-/**
- * Tenant document management (Phase 9): document metadata/URL persistence and
- * tenant-scoped retrieval (FR-28 through FR-30).
- *
- * Storage split (MRD §16): the actual file lives in Supabase storage; the
- * database keeps only the metadata and the stored document URL. The client
- * uploads the file to storage and then records the resulting URL through
- * these operations. Deleting a record never touches the storage object —
- * the client removes the storage file alongside the record deletion.
- *
- * Role boundaries (mirroring the complaint/announcement services):
- * - Every operation here is tenant-only and scoped to the CALLER's own
- *   tenant record — no tenantId is accepted from input, so one tenant can
- *   never read, change, or delete another tenant's documents.
- * - A Tenant-role user without a tenant record cannot upload documents
- *   (documents attach to a tenant record); listing returns a valid empty
- *   page instead of an error.
- * - Ownership failures on update/delete are reported as NOT_FOUND, so a
- *   foreign document's existence is never leaked.
- *
- * uploadTenantDocs and deleteTenantDocuments are batch operations and run
- * inside a single transaction (all-or-nothing). updateTenantDocs row-locks
- * the document (SELECT ... FOR UPDATE, the same pessimistic-lock pattern as
- * Phases 5 through 8), so concurrent updates of one document serialize
- * instead of losing updates.
- */
-
-/** One document in an uploadTenantDocs batch. */
 export interface UploadTenantDocInput {
   docName: string;
   docUrl: string;
   docNumber?: string | null;
 }
 
-/** uploadTenantDocs input: a non-empty batch of documents. */
 export interface UploadTenantDocsInput {
   docs: UploadTenantDocInput[];
 }
 
-/**
- * Partial update semantics (same as the PG/room/tenant/payment/complaint/
- * announcement services): undefined and null leave a field unchanged. An
- * empty string clears the optional docNumber; docName and docUrl are
- * required fields and reject empty values.
- */
 export interface UpdateTenantDocsInput {
   docName?: string | null;
   docUrl?: string | null;
   docNumber?: string | null;
 }
 
-/** Query args for the tenant-facing document list (pagination only). */
 export interface DocumentListArgs {
   limit?: number | null;
   offset?: number | null;
 }
 
-/** Result shape for the paginated document list (mirrors RoomPage, MRD §16). */
 export interface TenantDocumentPage {
   items: TenantDocument[];
   total: number;
@@ -72,9 +35,9 @@ export interface TenantDocumentPage {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 const MAX_BATCH_SIZE = 20;
-const DOC_NAME_MAX = 120; // must match the tenant_documents.docName column (varchar 120)
-const DOC_URL_MAX = 500; // must match the tenant_documents.docUrl column (varchar 500)
-const DOC_NUMBER_MAX = 60; // must match the tenant_documents.docNumber column (varchar 60)
+const DOC_NAME_MAX = 120;
+const DOC_URL_MAX = 500;
+const DOC_NUMBER_MAX = 60;
 
 function documentRepo() {
   return AppDataSource.getRepository(TenantDocument);
@@ -96,7 +59,6 @@ function notFound(message: string): GraphQLError {
   });
 }
 
-/** PostgreSQL foreign-key violation (23503): the referenced row is gone. */
 function isForeignKeyViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -105,7 +67,6 @@ function isForeignKeyViolation(error: unknown): boolean {
   );
 }
 
-/** Required text: trimmed, non-empty, within the column limit. */
 function requiredText(
   raw: string | null | undefined,
   max: number,
@@ -121,11 +82,6 @@ function requiredText(
   return trimmed;
 }
 
-/**
- * The stored document URL: required, within the column limit, and an
- * absolute http(s) URL. Anything else is rejected before the write, so a
- * broken URL can never be persisted.
- */
 function validateDocUrl(raw: string | null | undefined): string {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (trimmed.length === 0) {
@@ -146,10 +102,6 @@ function validateDocUrl(raw: string | null | undefined): string {
   return trimmed;
 }
 
-/**
- * The optional document reference number: absent/null/empty clears it,
- * otherwise trimmed and within the column limit.
- */
 function validateDocNumber(raw: string | null | undefined): string | null {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (trimmed.length === 0) {
@@ -161,7 +113,6 @@ function validateDocNumber(raw: string | null | undefined): string | null {
   return trimmed;
 }
 
-/** Pagination bounds for the document list (MRD §16). */
 function validatePage(
   limitRaw: number | null | undefined,
   offsetRaw: number | null | undefined
@@ -177,31 +128,16 @@ function validatePage(
   return { limit, offset };
 }
 
-/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Guards the id inputs: a malformed id can never match a row, so it is
- * reported with the same NOT_FOUND answer as a well-formed id that does not
- * exist. Without this guard the uuid column error would surface as an
- * internal server error.
- */
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/** The caller's own tenant record (documents attach to a tenant record). */
 async function findOwnTenant(userId: string): Promise<Tenant | null> {
   return tenantRepo().findOne({ where: { user: { id: userId } } });
 }
 
-/**
- * Locks the document row (SELECT ... FOR UPDATE) and loads it with its
- * tenant and the tenant's user, ready for the ownership check. Concurrent
- * updates/deletes of the same document serialize here. Only the document
- * row is locked — the tenant and user are read-only reference data for the
- * operation.
- */
 async function lockDocument(
   manager: EntityManager,
   id: string
@@ -223,7 +159,6 @@ async function lockDocument(
   return document;
 }
 
-/** Throws NOT_FOUND unless the locked document belongs to the caller. */
 function assertOwnership(document: TenantDocument, userId: string): void {
   if (!document.tenant || document.tenant.user?.id !== userId) {
     // Same answer for a foreign document and a deleted one — never leak
@@ -232,17 +167,10 @@ function assertOwnership(document: TenantDocument, userId: string): void {
   }
 }
 
-/** Deduplicates an id batch while keeping the caller's order. */
 function uniqueIds(ids: string[]): string[] {
   return [...new Set(ids)];
 }
 
-/**
- * Records uploaded document metadata/URLs (FR-29, upload half). The caller
- * is a Tenant-role user; every document attaches to their own tenant
- * record. The batch runs in one transaction — either every document is
- * recorded or none is.
- */
 export async function uploadTenantDocs(
   userId: string,
   input: UploadTenantDocsInput
@@ -255,7 +183,6 @@ export async function uploadTenantDocs(
     throw badRequest(`A document batch must contain ${MAX_BATCH_SIZE} documents or fewer`);
   }
 
-  // Scalar validation runs before any database work (fail fast, no locks yet).
   const validated = docs.map((doc) => ({
     docName: requiredText(doc.docName, DOC_NAME_MAX, 'Document name'),
     docUrl: validateDocUrl(doc.docUrl),
@@ -275,33 +202,23 @@ export async function uploadTenantDocs(
       const rows = validated.map((doc) => repo.create({ tenant, ...doc }));
       return repo.save(rows);
     });
-    // create()/save() may return relation clones of the input literal, so
-    // re-attach the live entity (same convention as Phases 5 through 8),
-    // keeping the caller's batch order.
     return saved.map((row) => {
       row.tenant = tenant;
       return row;
     });
   } catch (error) {
     if (isForeignKeyViolation(error)) {
-      // The tenant record was deleted between the check and the insert.
       throw badRequest('The documents could not be recorded because the tenant assignment changed');
     }
     throw error;
   }
 }
 
-/**
- * Updates one of the caller's own documents (FR-29, update half). Fields
- * follow partial-update semantics. Runs under a row lock so concurrent
- * updates of one document cannot interleave.
- */
 export async function updateTenantDocs(
   userId: string,
   id: string,
   input: UpdateTenantDocsInput
 ): Promise<TenantDocument> {
-  // Scalar validation runs before the transaction (fail fast, no locks yet).
   const docName =
     input.docName !== undefined && input.docName !== null
       ? requiredText(input.docName, DOC_NAME_MAX, 'Document name')
@@ -328,18 +245,11 @@ export async function updateTenantDocs(
     }
 
     const saved = await manager.getRepository(TenantDocument).save(document);
-    // Re-attach the live relation in case save() returned a relation clone.
     saved.tenant = document.tenant;
     return saved;
   });
 }
 
-/**
- * Deletes the caller's own documents (FR-30). The batch runs in one
- * transaction and is all-or-nothing: every id must exist and belong to the
- * caller, otherwise nothing is deleted. Storage files are not touched —
- * the client removes them alongside this call.
- */
 export async function deleteTenantDocuments(
   userId: string,
   ids: string[]
@@ -353,8 +263,6 @@ export async function deleteTenantDocuments(
   }
 
   return AppDataSource.transaction(async (manager) => {
-    // Lock + verify every row first: a single unknown or foreign id fails
-    // the whole batch before anything is deleted.
     for (const id of unique) {
       const document = await lockDocument(manager, id);
       assertOwnership(document, userId);
@@ -364,13 +272,6 @@ export async function deleteTenantDocuments(
   });
 }
 
-/**
- * The tenant-facing document list (FR-28): the current user's own
- * documents, newest first. A Tenant-role user without a tenant record (no
- * assignment yet) sees an empty page — a valid empty state, not an error.
- * Scope is forced to the caller's tenant record; no tenantId is accepted
- * from input, so one tenant can never read another tenant's documents.
- */
 export async function getTenantDocuments(
   userId: string,
   args: DocumentListArgs

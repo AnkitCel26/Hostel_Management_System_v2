@@ -7,10 +7,6 @@ interface PaymentStatusPresentation {
   color: 'success' | 'info' | 'warning' | 'error';
 }
 
-/**
- * Status presentation (design system §9). One mapping for every surface —
- * admin table, tenant history, dialogs — so a status always looks the same.
- */
 const STATUS_PRESENTATION: Record<PaymentStatus, PaymentStatusPresentation> = {
   paid: { label: 'Paid', color: 'success' },
   partial: { label: 'Partial', color: 'info' },

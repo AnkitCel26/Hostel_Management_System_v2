@@ -50,7 +50,6 @@ interface GetAllPgsData {
   getAllPgs: Pg[];
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -63,7 +62,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the rooms, tenants, and payments pages. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -71,7 +69,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/** Long descriptions collapse to two lines; the full text stays in the title attribute. */
 const descriptionSx = {
   display: '-webkit-box',
   WebkitLineClamp: 2,
@@ -79,11 +76,6 @@ const descriptionSx = {
   overflow: 'hidden'
 } as const;
 
-/**
- * Admin complaints page (/admin/complaints): the searchable, filterable list of
- * every tenant complaint with status management (FR-23 retrieval, FR-24
- * update). Complaints are filed by tenants, so this page has no create action.
- */
 export function AdminComplaintsPage() {
   const [searchParams] = useSearchParams();
   const { success } = useSnackbar();
@@ -154,7 +146,6 @@ export function AdminComplaintsPage() {
         subtitle="Review tenant complaints, track progress, and close resolved issues."
       />
 
-      {/* Toolbar */}
       <Card sx={{ mb: 3 }}>
         <CardContent
           sx={{

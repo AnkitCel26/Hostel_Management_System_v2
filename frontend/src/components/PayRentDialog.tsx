@@ -23,24 +23,15 @@ import type { RentPayment } from '../types';
 import { getGraphQLErrorMessage } from '../utils/errors';
 import { formatCurrency, formatDateOnly } from '../utils/format';
 
-// Limits mirror the backend payment service validation (payment.service.ts).
 const AMOUNT_MAX = 10_000_000;
 
 interface PayRentDialogProps {
   open: boolean;
-  /** The rent payment to pay toward; null keeps the dialog closed. */
   payment: RentPayment | null;
   onClose: () => void;
-  /** Called after a successful payment; the parent shows feedback and refetches. */
   onPaid: (message: string) => void;
 }
 
-/**
- * Tenant self-service payment dialog: pays any amount toward one of the
- * tenant's own rent records until it is fully paid. The amount already paid
- * and the remaining rent are shown for context; status and paid date are
- * always derived by the server.
- */
 export function PayRentDialog({ open, payment, onClose, onPaid }: PayRentDialogProps) {
   const [serverError, setServerError] = React.useState<string | null>(null);
 
@@ -66,8 +57,6 @@ export function PayRentDialog({ open, payment, onClose, onPaid }: PayRentDialogP
 
   type PayRentFormData = z.infer<typeof payRentSchema>;
 
-  // No refetchQueries: the parent refetches its own query in onPaid, and the
-  // updated RentPayment entity merges into the Apollo cache by id.
   const [payRent] = useMutation(PAY_RENT_MUTATION);
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } =
@@ -76,7 +65,6 @@ export function PayRentDialog({ open, payment, onClose, onPaid }: PayRentDialogP
       defaultValues: { amount: remaining }
     });
 
-  // Seed the amount with the remaining rent each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);

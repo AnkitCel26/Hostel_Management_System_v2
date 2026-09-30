@@ -1,13 +1,3 @@
-/**
- * Phase 5 verification: exercises tenant management through the real GraphQL
- * layer (same typeDefs/resolvers the Express app serves) — authorization,
- * input validation, PG/room assignment and reassignment occupancy
- * invariants (including a concurrent race for a room's last bed), user
- * re-linking, searchable/paginated tenant listing, nested resolution, and
- * the tenant-facing PG/room query. Creates throwaway data and cleans up.
- *
- * Run: npx ts-node --transpile-only src/scripts/verifyPhase5.ts
- */
 import 'reflect-metadata';
 import { ApolloServer } from '@apollo/server';
 import type { Request, Response } from 'express';
@@ -209,7 +199,6 @@ function expectError(label: string, result: GqlResult, code: string): void {
   console.log(`PASS: ${label}`);
 }
 
-/** True when the result's `key` payload is present and error-free. */
 function succeeded(result: GqlResult, key: string): boolean {
   return (
     (!result.errors || result.errors.length === 0) &&
@@ -219,7 +208,6 @@ function succeeded(result: GqlResult, key: string): boolean {
   );
 }
 
-/** Removes any data left over from a previous (or partial) run, in FK-safe order. */
 async function cleanupTestData(): Promise<void> {
   const userRepo = AppDataSource.getRepository(User);
   const tenantRepo = AppDataSource.getRepository(Tenant);
@@ -282,7 +270,6 @@ async function main(): Promise<void> {
   try {
     await cleanupTestData();
 
-    // --- throwaway users (auth flows are Phase 3 and already verified) ---
     const userRepo = AppDataSource.getRepository(User);
     const admin = await userRepo.save(
       userRepo.create({
@@ -294,7 +281,6 @@ async function main(): Promise<void> {
     );
     const asAdmin: AuthUser = { id: admin.id, role: 'Admin' };
 
-    /** Reads a room's occupancy through the GraphQL room list (search-scoped). */
     const occupancyOf = async (pgId: string, roomNumber: string): Promise<number> => {
       const page = field<RoomPageShape>(
         await exec(GET_ALL_ROOMS, { pgId, search: roomNumber }, asAdmin),
@@ -332,7 +318,6 @@ async function main(): Promise<void> {
 
     const asTenant = (user: User): AuthUser => ({ id: user.id, role: 'Tenant' });
 
-    // --- PGs and rooms (Phase 4 operations, already verified) ---
     const createPgViaGql = async (name: string): Promise<PgShape> =>
       field<PgShape>(
         await exec(CREATE_PG, { input: { name, address: `${name} address` } }, asAdmin),
@@ -346,14 +331,11 @@ async function main(): Promise<void> {
         await exec(CREATE_ROOM, { input: { pgId, roomNumber, capacity, rent: 5000 } }, asAdmin),
         'createRoom'
       );
-    // A-101 capacity 2 (assignment flows), A-102 capacity 1 (race test),
-    // A-103 capacity 3 (reassignment flows), B-201 capacity 2 (PG move).
     const a101 = await createRoomViaGql(alpha.id, 'A-101', 2);
     const a102 = await createRoomViaGql(alpha.id, 'A-102', 1);
     const a103 = await createRoomViaGql(alpha.id, 'A-103', 3);
     const b201 = await createRoomViaGql(beta.id, 'B-201', 2);
 
-    // --- authorization (FR-33: both roles guarded at the resolver) ---
     expectError('guest cannot list tenants', await exec(GET_ALL_TENANTS, {}), 'FORBIDDEN');
     expectError(
       'tenant cannot list tenants',
@@ -380,7 +362,6 @@ async function main(): Promise<void> {
       'FORBIDDEN'
     );
 
-    // --- createTenant validation (FR-13, FR-15) ---
     expectError(
       'createTenant rejects an unknown user',
       await exec(
@@ -452,7 +433,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- createTenant without a room (FR-13): PG membership only ---
     const rahul = field<TenantShape>(
       await exec(
         CREATE_TENANT,
@@ -480,7 +460,6 @@ async function main(): Promise<void> {
     check('createTenant serializes createdAt as a string', typeof rahul.createdAt, 'string');
     check('creating a tenant without a room leaves occupancy untouched', await occupancyOf(alpha.id, 'A-101'), 0);
 
-    // --- one tenant record per user (User 1 ─ 0..1 Tenant) ---
     expectError(
       'createTenant rejects a user who already has a tenant record',
       await exec(
@@ -491,7 +470,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- createTenant with a room (FR-16: occupancy advances atomically) ---
     const priya = field<TenantShape>(
       await exec(
         CREATE_TENANT,
@@ -512,7 +490,6 @@ async function main(): Promise<void> {
     check('the response carries the incremented occupancy', priya.room?.occupiedCount, 1);
     check('createTenant advanced the room occupancy', await occupancyOf(alpha.id, 'A-101'), 1);
 
-    // --- updateTenant: scalar fields (FR-14) ---
     expectError(
       'updateTenant rejects an unknown id',
       await exec(UPDATE_TENANT, { id: NONEXISTENT_ID, input: { name: 'Nobody' } }, asAdmin),
@@ -541,7 +518,6 @@ async function main(): Promise<void> {
     check('updateTenant leaves the name untouched', cleared.name, 'Rahul V. Verma');
     check('scalar updates leave occupancy untouched', await occupancyOf(alpha.id, 'A-101'), 1);
 
-    // --- assign a room to a PG-only tenant (FR-16) ---
     const assigned = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: rahul.id, input: { roomId: a101.id } }, asAdmin),
       'updateTenant'
@@ -550,7 +526,6 @@ async function main(): Promise<void> {
     check('the assignment response carries the incremented occupancy', assigned.room?.occupiedCount, 2);
     check('the room is now full at capacity 2', await occupancyOf(alpha.id, 'A-101'), 2);
 
-    // --- capacity is enforced (FR-15): A-101 is full at 2/2 ---
     expectError(
       'createTenant rejects a room that is full',
       await exec(
@@ -561,7 +536,6 @@ async function main(): Promise<void> {
       'BAD_USER_INPUT'
     );
 
-    // --- unassign (roomId: '' releases the bed, FR-16) ---
     const unassigned = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: rahul.id, input: { roomId: '' } }, asAdmin),
       'updateTenant'
@@ -569,14 +543,12 @@ async function main(): Promise<void> {
     check('updateTenant unassigns the room', unassigned.room, null);
     check('unassigning decrements the occupancy', await occupancyOf(alpha.id, 'A-101'), 1);
 
-    // --- assignment must stay inside the tenant's PG (FR-15) ---
     expectError(
       'updateTenant rejects assigning a room that belongs to another PG',
       await exec(UPDATE_TENANT, { id: rahul.id, input: { roomId: b201.id } }, asAdmin),
       'BAD_USER_INPUT'
     );
 
-    // --- reassign (FR-16: decrement + increment commit together) ---
     const moved = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: priya.id, input: { roomId: a103.id } }, asAdmin),
       'updateTenant'
@@ -585,7 +557,6 @@ async function main(): Promise<void> {
     check('the old room is released', await occupancyOf(alpha.id, 'A-101'), 0);
     check('the new room gains the tenant', await occupancyOf(alpha.id, 'A-103'), 1);
 
-    // --- reassigning to the same room is a safe no-op ---
     const sameRoom = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: priya.id, input: { roomId: a103.id } }, asAdmin),
       'updateTenant'
@@ -593,7 +564,6 @@ async function main(): Promise<void> {
     check('same-room reassignment keeps the room', sameRoom.room?.roomNumber, 'A-103');
     check('same-room reassignment changes no occupancy', await occupancyOf(alpha.id, 'A-103'), 1);
 
-    // --- PG moves require an explicit room decision ---
     expectError(
       'updateTenant rejects a PG move while a room is silently kept',
       await exec(UPDATE_TENANT, { id: priya.id, input: { pgId: beta.id } }, asAdmin),
@@ -612,7 +582,6 @@ async function main(): Promise<void> {
     check('the old-PG room is released on the PG move', await occupancyOf(alpha.id, 'A-103'), 0);
     check('the new-PG room gains the tenant', await occupancyOf(beta.id, 'B-201'), 1);
 
-    // --- PG move with an explicit room clear (roomId: null) ---
     const arjun = field<TenantShape>(
       await exec(
         CREATE_TENANT,
@@ -630,7 +599,6 @@ async function main(): Promise<void> {
     check('clearing the room on the PG move releases it', arjunMoved.room, null);
     check('A-103 is empty after the PG move', await occupancyOf(alpha.id, 'A-103'), 0);
 
-    // --- empty-string PG id means "keep the current PG" ---
     const noopPg = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: arjun.id, input: { pgId: '', name: 'Arjun P. Patel' } }, asAdmin),
       'updateTenant'
@@ -638,7 +606,6 @@ async function main(): Promise<void> {
     check('an empty PG id keeps the current PG', noopPg.pg?.id, beta.id);
     check('the name still updates', noopPg.name, 'Arjun P. Patel');
 
-    // --- user re-linking (FR-15: validate user relationships on update) ---
     const neha = field<TenantShape>(
       await exec(
         CREATE_TENANT,
@@ -674,7 +641,6 @@ async function main(): Promise<void> {
     check('relinking to the same user is a no-op', reaffirmed.user?.email, LINK_EMAIL);
     check('user relinking never touches occupancy', await occupancyOf(alpha.id, 'A-101'), 0);
 
-    // --- concurrency: two admins race for the last bed of A-102 (FR-35) ---
     check('the race room starts empty', await occupancyOf(alpha.id, 'A-102'), 0);
     const raceResults = await Promise.all([
       exec(
@@ -706,14 +672,12 @@ async function main(): Promise<void> {
     });
     check('the race loser has no tenant record (rollback)', loserTenantCount, 0);
 
-    // --- capacity is enforced on updates too (FR-15): A-102 is full at 1/1 ---
     expectError(
       'updateTenant rejects a room that is full',
       await exec(UPDATE_TENANT, { id: rahul.id, input: { roomId: a102.id } }, asAdmin),
       'BAD_USER_INPUT'
     );
 
-    // --- pagination + search (FR-12-consistent behavior, MRD §16) ---
     const bulkInput = (user: User, i: number) => ({
       userId: user.id,
       pgId: alpha.id,
@@ -806,7 +770,6 @@ async function main(): Promise<void> {
     check('getAllTenants respects the requested limit', defaultLimit.items.length <= 3, true);
     check('getAllTenants echoes the limit', defaultLimit.limit, 3);
 
-    // --- nested resolution through the relation field resolvers ---
     const deepTenant = field<{ items: DeepTenantShape[] }>(
       await exec(GET_ALL_TENANTS_DEEP, { search: 'Rahul', pgId: alpha.id }, asAdmin),
       'getAllTenants'
@@ -818,7 +781,6 @@ async function main(): Promise<void> {
     check('the tenant resolves its PG', rahulDeep.pg.name, TEST_PG_NAMES[0]);
     check('the PG resolves its rooms', rahulDeep.pg.rooms.length, 3);
 
-    // Rahul is reassigned to A-101 (also proves assign-after-unassign).
     const rahulBack = field<TenantShape>(
       await exec(UPDATE_TENANT, { id: rahul.id, input: { roomId: a101.id } }, asAdmin),
       'updateTenant'
@@ -844,7 +806,6 @@ async function main(): Promise<void> {
     check('the room resolves its assigned tenant', roomTenant.name, 'Rahul V. Verma');
     check('the room tenant resolves its PG', roomTenant.pg.name, TEST_PG_NAMES[0]);
 
-    // --- tenant-facing query (FR-17): the admin's assignment is what the tenant sees ---
     expectError(
       'getTenantPgRoom requires the Tenant role',
       await exec(GET_TENANT_PG_ROOM, {}, asAdmin),
@@ -856,11 +817,9 @@ async function main(): Promise<void> {
     );
     check("the tenant sees the assigned PG", rahulView.pg.id, alpha.id);
     check('the tenant sees the assigned room', rahulView.room.roomNumber, 'A-101');
-    // The race loser never got a tenant record — a valid "not assigned yet" state.
     const loserView = await exec(GET_TENANT_PG_ROOM, {}, asTenant(loserUser));
     check('a user without a tenant record gets null', loserView.data?.getTenantPgRoom ?? null, null);
 
-    // --- occupancy integrity sweep: occupiedCount == assigned tenant count ---
     const roomRepo = AppDataSource.getRepository(Room);
     const tenantRepo = AppDataSource.getRepository(Tenant);
     const testRooms = await roomRepo.find({

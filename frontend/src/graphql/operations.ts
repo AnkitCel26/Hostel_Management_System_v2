@@ -68,11 +68,7 @@ export const HEALTH_QUERY = gql`
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Phase 4 — PG and Room Management
 // Field fragments keep the selected shape consistent across every operation.
-// ---------------------------------------------------------------------------
-
 const PG_FIELDS = gql`
   fragment PgFields on Pg {
     id
@@ -194,10 +190,6 @@ export const UPDATE_ROOM_MUTATION = gql`
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Phase 5 — Tenant Management
-// ---------------------------------------------------------------------------
-
 const TENANT_FIELDS = gql`
   fragment TenantFields on Tenant {
     id
@@ -231,10 +223,6 @@ const TENANT_WITH_RELATIONS = gql`
   }
 `;
 
-/**
- * Admin user-account list for the tenant form's link-user picker. `tenant`
- * marks accounts already backing a tenant record so the picker can skip them.
- */
 export const GET_ALL_USERS_QUERY = gql`
   query GetAllUsers {
     allUsers {
@@ -283,11 +271,6 @@ export const UPDATE_TENANT_MUTATION = gql`
     }
   }
 `;
-
-// ---------------------------------------------------------------------------
-// Phase 6 — Rent and Payment Management
-// Status is always the live derived value (never accepted from input).
-// ---------------------------------------------------------------------------
 
 const PAYMENT_FIELDS = gql`
   fragment PaymentFields on RentPayment {
@@ -404,8 +387,6 @@ export const UPDATE_RENT_PAYMENT_MUTATION = gql`
   }
 `;
 
-// Tenant self-service payment: adds to the amount already paid on one of the
-// tenant's own payments (the tenant relation is not needed in the response).
 export const PAY_RENT_MUTATION = gql`
   ${PAYMENT_FIELDS}
   mutation PayRent($input: PayRentInput!) {
@@ -414,12 +395,6 @@ export const PAY_RENT_MUTATION = gql`
     }
   }
 `;
-
-// ---------------------------------------------------------------------------
-// Phase 7 — Complaint Management
-// A new complaint is always filed by the current tenant under their own PG:
-// only title and description are sent, and status is admin-managed.
-// ---------------------------------------------------------------------------
 
 const COMPLAINT_FIELDS = gql`
   fragment ComplaintFields on Complaint {
@@ -520,13 +495,6 @@ export const UPDATE_COMPLAINT_MUTATION = gql`
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Phase 8 — Announcement Management
-// An announcement always belongs to one PG and one creator (the admin who
-// posted it), so the fragment carries both relations: the admin list shows
-// them, the tenant list shows the property name.
-// ---------------------------------------------------------------------------
-
 const ANNOUNCEMENT_FIELDS = gql`
   fragment AnnouncementFields on Announcement {
     id
@@ -600,13 +568,6 @@ export const UPDATE_ANNOUNCEMENT_MUTATION = gql`
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Phase 9 — Tenant Documents
-// A document belongs to exactly one tenant record, which the server derives
-// from the caller, so no tenant relation is ever sent or filtered on. The
-// fragment carries the stored URL and the optional reference number only.
-// ---------------------------------------------------------------------------
-
 const TENANT_DOCUMENT_FIELDS = gql`
   fragment TenantDocumentFields on TenantDocument {
     id
@@ -655,15 +616,6 @@ export const DELETE_TENANT_DOCUMENTS_MUTATION = gql`
     deleteTenantDocuments(ids: $ids)
   }
 `;
-
-// ---------------------------------------------------------------------------
-// Phase 10 — Dashboards
-// One admin query returns every count, the per-property occupancy series, and
-// both recent-activity lists, so the dashboard is a single round trip. The
-// tenant dashboard reuses the existing tenant-scoped operations (room,
-// payments, complaints, announcements) — each is already scoped to the caller
-// server-side, so no tenant-specific dashboard query is needed.
-// ---------------------------------------------------------------------------
 
 const RECENT_PAYMENT_FIELDS = gql`
   fragment RecentPaymentFields on RentPayment {

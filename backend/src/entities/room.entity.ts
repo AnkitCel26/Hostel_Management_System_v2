@@ -46,7 +46,6 @@ export class Room {
   @UpdateDateColumn()
   updatedAt!: Date;
 
-  // Tenant * ─ 0..1 Room (shared rooms can hold several tenants)
   @OneToMany(() => Tenant, (tenant) => tenant.room)
   tenants?: Tenant[];
 }

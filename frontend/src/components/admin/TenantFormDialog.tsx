@@ -29,7 +29,6 @@ import { PROPERTY_TERM } from '../../utils/labels';
 const tenantSchema = z.object({
   userId: z.string().min(1, 'Select a user account'),
   pgId: z.string().min(1, `Select a ${PROPERTY_TERM.singularLower}`),
-  // '' means "no room assigned".
   roomId: z.string(),
   name: z
     .string()
@@ -41,8 +40,6 @@ const tenantSchema = z.object({
     .string()
     .trim()
     .max(120, 'Emergency contact must be 120 characters or fewer'),
-  // The native date input yields '' or YYYY-MM-DD; the backend re-validates
-  // that the value is a real calendar date.
   joinDate: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date')
 });
 
@@ -50,24 +47,13 @@ type TenantFormData = z.infer<typeof tenantSchema>;
 
 interface TenantFormDialogProps {
   open: boolean;
-  /** The tenant being edited, or null to create a new one. */
   tenant: Tenant | null;
-  /** Properties with their rooms (getAllPgsRooms) for the cascaded room picker. */
   pgs: Pg[];
-  /** All users (allUsers); only unlinked Tenant-role accounts are offered on create. */
   users: AdminUser[];
   onClose: () => void;
-  /** Called after a successful save; the parent shows feedback and refetches. */
   onSaved: (message: string) => void;
 }
 
-/**
- * Create/edit dialog for tenants (FR-13, FR-14, FR-15). A tenant record links
- * an existing Tenant-role user to a property, with an optional room
- * assignment; edit mode also supports room reassignment and moving the tenant
- * to another property. Occupancy is updated transactionally by the backend
- * (FR-16) and is never editable here.
- */
 export function TenantFormDialog({
   open,
   tenant,
@@ -79,11 +65,6 @@ export function TenantFormDialog({
   const isEdit = tenant !== null;
   const [serverError, setServerError] = React.useState<string | null>(null);
 
-  // Room assignment moves room.occupiedCount, which Apollo cannot merge into
-  // the cached getAllPgsRooms PG.rooms lists — refetch it so the Property and
-  // Room Management pages and the sidebar occupancy card stay fresh. Creating
-  // a tenant also consumes a linkable user account, so the user list is
-  // refetched as well.
   const [createTenant] = useMutation(CREATE_TENANT_MUTATION, {
     refetchQueries: [{ query: GET_ALL_PGS_ROOMS_QUERY }, { query: GET_ALL_USERS_QUERY }]
   });
@@ -111,7 +92,6 @@ export function TenantFormDialog({
     }
   });
 
-  // Load the record being edited (or blank defaults) each time the dialog opens.
   React.useEffect(() => {
     if (open) {
       setServerError(null);
@@ -130,7 +110,6 @@ export function TenantFormDialog({
   const selectedPgId = watch('pgId');
   const selectedRoomId = watch('roomId');
 
-  // Rooms of the currently selected property, feeding the cascaded room picker.
   const roomsForPg = React.useMemo(
     () => pgs.find((pg) => pg.id === selectedPgId)?.rooms ?? [],
     [pgs, selectedPgId]
@@ -142,9 +121,6 @@ export function TenantFormDialog({
     [users]
   );
 
-  // A room stays selected only while it belongs to the selected property —
-  // moving the tenant to another property resets the assignment (the backend
-  // rejects keeping a room from the old property).
   React.useEffect(() => {
     if (selectedRoomId !== '' && !roomsForPg.some((room) => room.id === selectedRoomId)) {
       setValue('roomId', '');
@@ -155,9 +131,6 @@ export function TenantFormDialog({
     setServerError(null);
     try {
       if (isEdit) {
-        // Update semantics: '' clears an optional field. roomId is always sent
-        // explicitly ('' → null unassigns) so a property move never silently
-        // keeps a room from the old property. The linked user never changes.
         const input: UpdateTenantInput = {
           name: data.name,
           phone: data.phone,
@@ -303,7 +276,6 @@ export function TenantFormDialog({
                 <MenuItem value="">No room assigned</MenuItem>
                 {roomsForPg.map((room) => {
                   const isFull = room.occupiedCount >= room.capacity;
-                  // The tenant's current room stays selectable even when full.
                   const isCurrent = tenant?.room?.id === room.id;
                   return (
                     <MenuItem key={room.id} value={room.id} disabled={isFull && !isCurrent}>

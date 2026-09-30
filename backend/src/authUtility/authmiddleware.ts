@@ -9,10 +9,6 @@ function authError(message: string, code: string, status: number): GraphQLError 
   });
 }
 
-/**
- * Extracts the authenticated user from the access-token cookie, if valid.
- * Returns undefined for guests — never throws (invalid tokens degrade to guest).
- */
 export function extractUserFromRequest(req: Request): AuthUser | undefined {
   const cookieName = process.env.JWT_COOKIE_NAME ?? 'hm_access';
   const token = req.cookies?.[cookieName];
@@ -22,7 +18,6 @@ export function extractUserFromRequest(req: Request): AuthUser | undefined {
   return payload ? { id: payload.sub, role: payload.role } : undefined;
 }
 
-/** Requires any authenticated user. Returns the authenticated user. */
 export function requireAuth(ctx: GraphQLContext): AuthUser {
   if (!ctx.user) {
     throw unauthenticated('You must be logged in to perform this action');

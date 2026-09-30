@@ -22,7 +22,6 @@ export interface UpdatePgInput {
   description?: string | null;
 }
 
-/** Result shape for the getTenantPgRoom query. */
 export interface TenantPgRoomResult {
   pg: Pg;
   room: Room | null;
@@ -63,17 +62,10 @@ function notFound(message: string): GraphQLError {
 /** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Guards the id inputs: a malformed id can never match a row, so it is
- * reported with the same NOT_FOUND answer as a well-formed id that does
- * not exist. Without this guard the uuid column error would surface as
- * an internal server error.
- */
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/** Required text: trimmed and length-checked against the column limits. */
 function requiredText(
   raw: string | null | undefined,
   min: number,
@@ -87,7 +79,6 @@ function requiredText(
   return trimmed;
 }
 
-/** Optional text: '' and null both persist as null (no value). */
 function optionalText(raw: string | null | undefined, max: number, label: string): string | null {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (trimmed.length > max) {
@@ -96,10 +87,6 @@ function optionalText(raw: string | null | undefined, max: number, label: string
   return trimmed.length === 0 ? null : trimmed;
 }
 
-/**
- * Validates input and applies it onto a PG instance.
- * Used by both create (schema guarantees name/address presence) and update.
- */
 function applyPgFields(pg: Pg, input: UpdatePgInput): Pg {
   if (input.name !== undefined && input.name !== null) {
     pg.name = requiredText(input.name, NAME_MIN, NAME_MAX, 'Name');
@@ -140,11 +127,6 @@ export async function getAllPgs(): Promise<Pg[]> {
   return pgRepo().find({ order: { createdAt: 'DESC' } });
 }
 
-/**
- * All PGs with their rooms attached (PGs newest first, rooms ordered by room
- * number). Rooms are fetched in one batched query instead of one per PG, and
- * each room carries its PG so nested Room.pg resolves without extra work.
- */
 export async function getAllPgsRooms(): Promise<Pg[]> {
   const pgs = await pgRepo().find({ order: { createdAt: 'DESC' } });
   if (pgs.length === 0) {
@@ -172,11 +154,6 @@ export async function getAllPgsRooms(): Promise<Pg[]> {
   return pgs;
 }
 
-/**
- * The tenant-facing query (FR-17): the current user's assigned PG and room.
- * Returns null while the user has no tenant record — assignment is created by
- * tenant management (Phase 5), so "not assigned yet" is a valid empty state.
- */
 export async function getTenantPgRoom(userId: string): Promise<TenantPgRoomResult | null> {
   const tenant = await tenantRepo().findOne({
     where: { user: { id: userId } },

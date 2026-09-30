@@ -48,7 +48,6 @@ interface GetAllPgsData {
   getAllPgs: Pg[];
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -61,7 +60,6 @@ const headCellSx = {
   py: 1.5
 } as const;
 
-/** Bordered icon button — same treatment as the profile page actions. */
 const actionIconSx = {
   border: 1,
   borderColor: 'divider',
@@ -69,11 +67,6 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
-/**
- * Admin Room Management page (/admin/rooms): searchable, paginated room table
- * with a PG filter, plus create/edit dialogs (FR-09, FR-10, FR-11, FR-12).
- * Supports ?pgId=<id> to pre-filter (linked from the PG Management page).
- */
 export function AdminRoomsPage() {
   const [searchParams] = useSearchParams();
   const { success } = useSnackbar();
@@ -138,7 +131,6 @@ export function AdminRoomsPage() {
         }
       />
 
-      {/* Toolbar */}
       <Card sx={{ mb: 3 }}>
         <CardContent
           sx={{

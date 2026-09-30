@@ -58,7 +58,6 @@ interface GetAllPgsData {
   getAllPgs: Pg[];
 }
 
-/** Table head cells: muted uppercase labels over a tinted strip. */
 const headCellSx = {
   fontSize: '0.6875rem',
   fontWeight: 700,
@@ -78,7 +77,6 @@ interface QuickLink {
   icon: React.ReactNode;
 }
 
-/** Shortcut tiles that route to the module behind each headline number. */
 const QUICK_LINKS: QuickLink[] = [
   {
     to: '/admin/properties',
@@ -118,11 +116,6 @@ const QUICK_LINKS: QuickLink[] = [
   }
 ];
 
-/**
- * A single "needs attention" line under the cards. Only shown when something
- * actually needs a decision, so a healthy operation stays quiet instead of
- * showing three zeroes as warnings.
- */
 function AttentionBanner({ stats }: { stats: AdminDashboardStats }) {
   const notes: { tone: 'error' | 'warning' | 'info'; text: string }[] = [];
 
@@ -185,7 +178,6 @@ function AttentionBanner({ stats }: { stats: AdminDashboardStats }) {
   );
 }
 
-/** "View all" link in a panel header. */
 function ViewAllLink({ to, label }: { to: string; label: string }) {
   return (
     <Button component={RouterLink} to={to} size="small" endIcon={<ArrowForwardIcon fontSize="small" />}>
@@ -194,14 +186,6 @@ function ViewAllLink({ to, label }: { to: string; label: string }) {
   );
 }
 
-/**
- * Admin dashboard (FR-31, MRD §10.9, design system §6).
- *
- * Layout, top to bottom: attention banner, six headline stat cards, the two
- * charts, recent activity tables, then shortcuts into each module. The numbers
- * all come from one `getAdminDashboardStats` query, so the cards, the charts,
- * and the tables can never show different numbers for the same thing.
- */
 export function AdminDashboardPage() {
   const { user } = useAuth();
   const firstName = user?.name.trim().split(' ')[0] ?? '';
@@ -273,16 +257,12 @@ export function AdminDashboardPage() {
         title={firstName ? `Welcome back, ${firstName}` : 'Dashboard'}
         subtitle="Occupancy, collection, and open work across your properties."
         action={
-          // A quiet refresh control: the dashboard is a read-only overview, so
-          // re-running the query is the only action it needs.
           <Button variant="outlined" onClick={() => void refetch()} disabled={loading}>
             {loading ? 'Refreshing…' : 'Refresh'}
           </Button>
         }
       />
 
-      {/* Thin progress strip while a background refresh is in flight, matching
-          the management pages' pattern. */}
       {loading ? (
         <LinearProgress
           aria-label="Refreshing dashboard"
@@ -292,7 +272,6 @@ export function AdminDashboardPage() {
 
       <AttentionBanner stats={stats} />
 
-      {/* Headline numbers (design system §6 admin dashboard cards). */}
       <Box
         sx={{
           display: 'grid',
@@ -344,7 +323,6 @@ export function AdminDashboardPage() {
         />
       </Box>
 
-      {/* Collection summary + charts. */}
       <Box
         sx={{
           display: 'grid',
@@ -379,8 +357,6 @@ export function AdminDashboardPage() {
         />
       </Box>
 
-      {/* Collection totals. A thin bar shows collection progress against the
-          amount billed, which is the number admins are judged on. */}
       <DashboardSection
         title="Collection this period"
         subtitle={
@@ -452,7 +428,6 @@ export function AdminDashboardPage() {
         </Stack>
       </DashboardSection>
 
-      {/* Recent activity (design system §6 "Recent activity sections"). */}
       <Box
         sx={{
           display: 'grid',
@@ -581,8 +556,6 @@ export function AdminDashboardPage() {
         </DashboardSection>
       </Box>
 
-      {/* Shortcuts into every admin module, so no page is more than one click
-          away from the dashboard (design system §5 navigation completeness). */}
       <DashboardSection
         title="Quick actions"
         subtitle="Jump straight into any part of the system"
@@ -628,8 +601,6 @@ export function AdminDashboardPage() {
         </Box>
       </DashboardSection>
 
-      {/* Occupancy headline sits with the charts above; this chip row is the
-          textual equivalent for screen readers and small screens. */}
       <Stack
         direction="row"
         spacing={1}

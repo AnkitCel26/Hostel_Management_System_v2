@@ -15,10 +15,6 @@ const PREVIEW_ROWS = [
   { name: 'Rahul Verma', room: 'C-310', status: 'Overdue', tone: 'error' }
 ] as const;
 
-/**
- * Decorative mini-dashboard mock built from real components (desktop only).
- * Used by the homepage hero and the auth pages' brand panel.
- */
 export function ProductPreview() {
   return (
     <Card aria-hidden="true" sx={{ display: { xs: 'none', md: 'block' }, overflow: 'hidden' }}>

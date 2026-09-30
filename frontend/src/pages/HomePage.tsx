@@ -37,10 +37,6 @@ import type { AuthUser } from '../types';
 import { PROPERTY_TERM } from '../utils/labels';
 import { getHomePath } from '../utils/navigation';
 
-/* -------------------------------------------------------------------------- */
-/*  Shared section heading                                                    */
-/* -------------------------------------------------------------------------- */
-
 interface SectionHeadingProps {
   eyebrow: string;
   title: string;
@@ -136,10 +132,6 @@ function GuestHero() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Feature grid                                                              */
-/* -------------------------------------------------------------------------- */
-
 const FEATURES = [
   {
     icon: <MeetingRoomIcon />,
@@ -195,10 +187,6 @@ function FeaturesSection() {
     </Box>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Role portals                                                              */
-/* -------------------------------------------------------------------------- */
 
 interface RoleCard {
   icon: ReactNode;
@@ -319,10 +307,6 @@ function RolesSection() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Final call to action                                                      */
-/* -------------------------------------------------------------------------- */
-
 function CtaSection() {
   return (
     <Box component="section" sx={{ py: { xs: 5, md: 8 } }}>
@@ -372,10 +356,6 @@ function CtaSection() {
     </Box>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Authenticated welcome-back view                                           */
-/* -------------------------------------------------------------------------- */
 
 interface QuickAction {
   icon: ReactNode;
@@ -502,10 +482,6 @@ function WelcomeBack({ user }: { user: AuthUser }) {
     </Box>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Page                                                                      */
-/* -------------------------------------------------------------------------- */
 
 export function HomePage() {
   const { user, loading } = useAuth();

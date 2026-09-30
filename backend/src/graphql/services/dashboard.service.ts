@@ -8,29 +8,10 @@ import { Room } from '../../entities/room.entity';
 import { Tenant } from '../../entities/tenant.entity';
 import { paymentStatusPredicates } from './payment.service';
 
-/**
- * Admin dashboard statistics (Phase 10, FR-31, MRD §10.9).
- *
- * One query returns every number and list the dashboard renders, so the page
- * is a single round trip instead of stitching six paginated list queries on
- * the client (which would cap the counts at the page size).
- *
- * Every count is a real aggregate over the whole table — never a page length —
- * and the payment status counts reuse the SAME SQL predicates the payment
- * list filter and the Phase 6 rent summary use (see `payment.service.ts`), so
- * the dashboard can never disagree with the payments page about how many
- * payments are pending, partial, paid, or overdue.
- *
- * Occupancy comes from `rooms.occupiedCount`, the column Phase 5 keeps in sync
- * with tenant assignments inside the same transaction as the assignment, so
- * bed counts are trustworthy without re-joining tenants.
- */
-
 export interface DashboardScopeArgs {
   pgId?: string | null;
 }
 
-/** One property's occupancy, for the dashboard's per-property chart. */
 export interface PropertyOccupancy {
   pgId: string;
   pgName: string;
@@ -38,7 +19,6 @@ export interface PropertyOccupancy {
   occupiedRooms: number;
   totalBeds: number;
   occupiedBeds: number;
-  /** Whole percent, 0 when the property has no beds yet. */
   occupancyPercent: number;
 }
 
@@ -49,7 +29,6 @@ export interface AdminDashboardStats {
   vacantRooms: number;
   totalBeds: number;
   occupiedBeds: number;
-  /** Whole percent across the scoped properties, 0 when there are no beds. */
   occupancyPercent: number;
   totalTenants: number;
   totalPayments: number;
@@ -69,11 +48,9 @@ export interface AdminDashboardStats {
   recentComplaints: ComplaintPage;
 }
 
-/** Default rows in the dashboard's recent-activity lists. */
 const RECENT_LIMIT = 5;
 const MAX_RECENT_LIMIT = 20;
 
-/** Result shape of the recent-activity lists (mirrors RoomPage, MRD §16). */
 export interface RentPaymentPage {
   items: RentPayment[];
   total: number;
@@ -88,7 +65,6 @@ export interface ComplaintPage {
   offset: number;
 }
 
-/** Query args for the dashboard's recent-activity lists (pagination only). */
 export interface RecentActivityArgs {
   limit?: number | null;
   offset?: number | null;
@@ -106,7 +82,6 @@ function rawNumber(value: string | number | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Rounded whole percent; 0 instead of NaN when the denominator is 0. */
 function percent(numerator: number, denominator: number): number {
   if (denominator <= 0) {
     return 0;
@@ -140,24 +115,17 @@ function complaintRepo() {
   return AppDataSource.getRepository(Complaint);
 }
 
-/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/**
- * Resolves the optional PG scope to a real row. A dashboard scoped to a
- * property that no longer exists is a client error, not an empty dashboard.
- */
 async function resolveScope(pgId: string | null | undefined): Promise<Pg | null> {
   const trimmed = typeof pgId === 'string' ? pgId.trim() : '';
   if (trimmed.length === 0) {
     return null;
   }
-  // Postgres uuid columns reject anything that is not a uuid with a 22P02
-  // error, so a malformed id is reported like an id that does not exist.
   if (!isUuid(trimmed)) {
     throw badRequest('The selected PG does not exist');
   }
@@ -168,12 +136,10 @@ async function resolveScope(pgId: string | null | undefined): Promise<Pg | null>
   return pg;
 }
 
-/** Property count (unfiltered, or 1 when scoped to one property). */
 async function countPgs(scope: Pg | null): Promise<number> {
   return scope ? 1 : pgRepo().count();
 }
 
-/** Room/bed/occupancy totals for the scope. */
 async function countRooms(
   scope: Pg | null
 ): Promise<{ totalRooms: number; occupiedRooms: number; totalBeds: number; occupiedBeds: number }> {
@@ -203,7 +169,6 @@ async function countRooms(
   };
 }
 
-/** Tenant count for the scope. */
 async function countTenants(scope: Pg | null): Promise<number> {
   const queryBuilder = tenantRepo().createQueryBuilder('tenant').select('COUNT(*)', 'total');
   if (scope) {
@@ -213,7 +178,6 @@ async function countTenants(scope: Pg | null): Promise<number> {
   return rawNumber(raw?.total);
 }
 
-/** Payment totals and live status counts, mirroring the Phase 6 summary. */
 async function countPayments(
   scope: Pg | null
 ): Promise<{
@@ -264,13 +228,9 @@ async function countPayments(
   };
 }
 
-/** Complaint counts by stored status (complaint status needs no derivation). */
 async function countComplaints(
   scope: Pg | null
 ): Promise<{ open: number; inProgress: number; resolved: number }> {
-  // Complaint status is a stored enum with no derived variant, so the three
-  // enum values are interpolated directly instead of bound as parameters
-  // (they are compile-time constants from the entity, never user input).
   const queryBuilder = complaintRepo()
     .createQueryBuilder('complaint')
     .select('COUNT(*)', 'total')
@@ -304,7 +264,6 @@ async function countComplaints(
   };
 }
 
-/** Announcement count for the scope. */
 async function countAnnouncements(scope: Pg | null): Promise<number> {
   const queryBuilder = AppDataSource.getRepository(Pg)
     .createQueryBuilder('pg')
@@ -319,12 +278,6 @@ async function countAnnouncements(scope: Pg | null): Promise<number> {
   return rawNumber(raw?.total);
 }
 
-/**
- * Per-property occupancy rows for the dashboard chart, highest occupancy
- * first. Always the full property list (never narrowed by the scope) — the
- * chart answers "which property is filling up", which is only useful across
- * all of them, and a single-property scope simply yields one bar.
- */
 async function getOccupancyByProperty(): Promise<PropertyOccupancy[]> {
   const raw = await pgRepo()
     .createQueryBuilder('pg')
@@ -364,7 +317,6 @@ async function getOccupancyByProperty(): Promise<PropertyOccupancy[]> {
     .sort((a, b) => b.occupancyPercent - a.occupancyPercent);
 }
 
-/** Validates one pagination arg pair, defaulting to the dashboard's page size. */
 function resolvePaging(args: RecentActivityArgs): { limit: number; offset: number } {
   const limit = args.limit ?? RECENT_LIMIT;
   if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_RECENT_LIMIT) {
@@ -377,7 +329,6 @@ function resolvePaging(args: RecentActivityArgs): { limit: number; offset: numbe
   return { limit, offset };
 }
 
-/** The most recently updated payments, with the relations the table shows. */
 async function getRecentPayments(
   scope: Pg | null,
   args: RecentActivityArgs
@@ -401,7 +352,6 @@ async function getRecentPayments(
   return { items, total, limit, offset };
 }
 
-/** The newest complaints, with the relations the table shows. */
 async function getRecentComplaints(
   scope: Pg | null,
   args: RecentActivityArgs
@@ -425,11 +375,6 @@ async function getRecentComplaints(
   return { items, total, limit, offset };
 }
 
-/**
- * Everything the admin dashboard renders, in one query. Counts, money totals,
- * the per-property occupancy chart series, and the two recent-activity lists.
- * Optionally scoped to one property.
- */
 export async function getAdminDashboardStats(
   args: DashboardScopeArgs,
   recentArgs: RecentActivityArgs = {}

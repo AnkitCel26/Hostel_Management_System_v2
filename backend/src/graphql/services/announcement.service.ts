@@ -6,29 +6,6 @@ import { Pg } from '../../entities/pg.entity';
 import { Tenant } from '../../entities/tenant.entity';
 import { User } from '../../entities/user.entity';
 
-/**
- * Announcement management (Phase 8): admin announcement creation and update
- * for a PG, plus PG-scoped retrieval (FR-25 through FR-27).
- *
- * Role boundaries (mirroring the payment/complaint services):
- * - createAnnouncement and updateAnnouncement are admin-only at the resolver.
- *   The creator (createdBy) is always the CALLER — never accepted from input
- *   — so an announcement can never be attributed to another user.
- * - An announcement is created for one PG (pgId in the create input); the PG
- *   is validated before the insert, and announcements can never be moved
- *   between PGs (updateAnnouncement accepts no pgId).
- * - getTenantPgAnnouncements is tenant-only and scoped to the CALLER's own
- *   tenant record's PG — no pgId is accepted from input, so a tenant can
- *   never read another PG's announcements. A Tenant-role user without a
- *   tenant record (no PG assignment yet) sees a valid empty page, not an
- *   error.
- *
- * Updates run inside a transaction that row-locks the announcement (the same
- * pessimistic-lock pattern as Phases 5/6/7), so concurrent
- * read-modify-write updates of one announcement serialize instead of losing
- * updates.
- */
-
 /** createAnnouncement input. createdBy is system-derived from the caller. */
 export interface CreateAnnouncementInput {
   pgId: string;
@@ -36,17 +13,11 @@ export interface CreateAnnouncementInput {
   content: string;
 }
 
-/**
- * Partial update semantics (same as the PG/room/tenant/payment/complaint
- * services): undefined and null leave a field unchanged. pgId is never
- * accepted — an announcement cannot move to another PG.
- */
 export interface UpdateAnnouncementInput {
   title?: string | null;
   content?: string | null;
 }
 
-/** Query args for the paginated, filterable admin announcement list. */
 export interface AnnouncementListArgs {
   search?: string | null;
   pgId?: string | null;
@@ -54,13 +25,11 @@ export interface AnnouncementListArgs {
   offset?: number | null;
 }
 
-/** Query args for the tenant-facing announcement list (pagination only). */
 export interface AnnouncementHistoryArgs {
   limit?: number | null;
   offset?: number | null;
 }
 
-/** Result shape for the paginated announcement collections (mirrors RoomPage, MRD §16). */
 export interface AnnouncementPage {
   items: Announcement[];
   total: number;
@@ -70,7 +39,7 @@ export interface AnnouncementPage {
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
-const TITLE_MAX = 160; // must match the announcements.title column (varchar 160)
+const TITLE_MAX = 160;
 const CONTENT_MAX = 5000;
 
 function announcementRepo() {
@@ -101,7 +70,6 @@ function notFound(message: string): GraphQLError {
   });
 }
 
-/** PostgreSQL foreign-key violation (23503): the referenced row is gone. */
 function isForeignKeyViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -110,7 +78,6 @@ function isForeignKeyViolation(error: unknown): boolean {
   );
 }
 
-/** Required text: trimmed, non-empty, within the column limit. */
 function requiredText(
   raw: string | null | undefined,
   max: number,
@@ -126,7 +93,6 @@ function requiredText(
   return trimmed;
 }
 
-/** Pagination bounds shared by both announcement lists (MRD §16). */
 function validatePage(
   limitRaw: number | null | undefined,
   offsetRaw: number | null | undefined
@@ -142,15 +108,8 @@ function validatePage(
   return { limit, offset };
 }
 
-/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Guards the id inputs: a malformed id can never match a row, so it is
- * reported with the same NOT_FOUND / BAD_USER_INPUT answer as a well-formed
- * id that does not exist. Without this guard the uuid column error would
- * surface as an internal server error.
- */
 function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
@@ -167,13 +126,6 @@ async function findPgOrFail(pgId: string): Promise<Pg> {
   return pg;
 }
 
-/**
- * Locks the announcement row (SELECT ... FOR UPDATE) and loads it with its
- * PG and creator. Concurrent updates of the same announcement serialize
- * here, so concurrent partial updates cannot interleave or lose updates.
- * Only the announcement row is locked — the PG and creator are read-only
- * reference data for this operation.
- */
 async function lockAnnouncement(
   manager: EntityManager,
   id: string
@@ -195,10 +147,6 @@ async function lockAnnouncement(
   return announcement;
 }
 
-/**
- * Creates an announcement (FR-25). The caller is an Admin-role user; the
- * announcement belongs to the validated PG and is attributed to the caller.
- */
 export async function createAnnouncement(
   userId: string,
   input: CreateAnnouncementInput
@@ -213,8 +161,6 @@ export async function createAnnouncement(
   const pg = await findPgOrFail(pgId);
   const createdBy = await userRepo().findOne({ where: { id: userId } });
   if (!createdBy) {
-    // Unreachable while the access token is only issued for a stored user,
-    // but kept as a hard guard: announcements must be attributable.
     throw badRequest('The announcement could not be attributed to the current user');
   }
 
@@ -227,31 +173,21 @@ export async function createAnnouncement(
 
   try {
     const saved = await announcementRepo().save(announcement);
-    // create()/save() may return relation clones of the input literal, so
-    // re-attach the live entities (same convention as Phases 5/6/7).
     saved.pg = pg;
     saved.createdBy = createdBy;
     return saved;
   } catch (error) {
     if (isForeignKeyViolation(error)) {
-      // The PG (or the caller's user) was deleted between the check and the insert.
       throw badRequest('The announcement could not be created because the PG no longer exists');
     }
     throw error;
   }
 }
 
-/**
- * Updates an announcement (FR-26, admin-only at the resolver). Title and
- * content follow partial-update semantics; the PG and creator are never
- * taken from input. Runs under a row lock so concurrent updates of one
- * announcement cannot interleave.
- */
 export async function updateAnnouncement(
   id: string,
   input: UpdateAnnouncementInput
 ): Promise<Announcement> {
-  // Scalar validation runs before the transaction (fail fast, no locks yet).
   const title =
     input.title !== undefined && input.title !== null
       ? requiredText(input.title, TITLE_MAX, 'Title')
@@ -272,20 +208,12 @@ export async function updateAnnouncement(
     }
 
     const saved = await manager.getRepository(Announcement).save(announcement);
-    // Re-attach the live relations in case save() returned a relation clone.
     saved.pg = announcement.pg;
     saved.createdBy = announcement.createdBy;
     return saved;
   });
 }
 
-/**
- * The tenant-facing announcement list (FR-27): announcements of the current
- * user's own PG, newest first. A Tenant-role user without a tenant record
- * (no assignment yet) sees an empty page — a valid empty state, not an
- * error. Scope is forced to the caller's PG; no pgId is accepted from
- * input, so one tenant can never read another PG's announcements.
- */
 export async function getTenantPgAnnouncements(
   userId: string,
   args: AnnouncementHistoryArgs
@@ -313,13 +241,6 @@ export async function getTenantPgAnnouncements(
   return { items, total, limit, offset };
 }
 
-/**
- * Searchable, paginated, filterable announcement list (admin-only at the
- * resolver). Search matches the PG name, the announcement title, and the
- * content case-insensitively. Filters: one PG. Newest announcements first
- * with a deterministic id tiebreak, mirroring the room/tenant/payment/
- * complaint lists (MRD §16: consistent pagination).
- */
 export async function getAllAnnouncements(
   args: AnnouncementListArgs
 ): Promise<AnnouncementPage> {
