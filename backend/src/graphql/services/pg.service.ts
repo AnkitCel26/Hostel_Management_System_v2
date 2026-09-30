@@ -60,6 +60,19 @@ function notFound(message: string): GraphQLError {
   });
 }
 
+/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Guards the id inputs: a malformed id can never match a row, so it is
+ * reported with the same NOT_FOUND answer as a well-formed id that does
+ * not exist. Without this guard the uuid column error would surface as
+ * an internal server error.
+ */
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 /** Required text: trimmed and length-checked against the column limits. */
 function requiredText(
   raw: string | null | undefined,
@@ -112,6 +125,9 @@ export async function createPg(input: CreatePgInput): Promise<Pg> {
 }
 
 export async function updatePg(id: string, input: UpdatePgInput): Promise<Pg> {
+  if (!isUuid(id)) {
+    throw notFound('PG not found');
+  }
   const pg = await pgRepo().findOne({ where: { id } });
   if (!pg) {
     throw notFound('PG not found');

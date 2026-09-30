@@ -28,11 +28,11 @@ export const typeDefs = `
     "All tenants, newest first (search matches tenant name, phone, and the linked user's email). Admin-only."
     getAllTenants(search: String, pgId: ID, limit: Int = 20, offset: Int = 0): TenantPage!
 
-    "Searchable, paginated rent payment list (search matches the tenant name, the linked user's email, the tenant's room number, and the payment notes; the status filter matches the live status). Admin-only."
-    getAllRentPayments(search: String, pgId: ID, tenantId: ID, status: PaymentStatus, limit: Int = 20, offset: Int = 0): RentPaymentPage!
+    "Searchable, paginated rent payment list (search matches the tenant name, the linked user's email, the tenant's room number, and the payment notes; the status filter matches the live status; the month filter scopes payments to the calendar month of their due date, as YYYY-MM). Admin-only."
+    getAllRentPayments(search: String, pgId: ID, tenantId: ID, status: PaymentStatus, month: String, limit: Int = 20, offset: Int = 0): RentPaymentPage!
 
-    "Aggregate payment statistics (counts by status, billed, collected, outstanding), optionally scoped to one PG. Admin-only."
-    getAdminRentSummary(pgId: ID): RentSummary!
+    "Aggregate payment statistics (counts by status, billed, collected, outstanding), optionally scoped to one PG and to one billing month (YYYY-MM, matching the payment due date). Admin-only."
+    getAdminRentSummary(pgId: ID, month: String): RentSummary!
 
     "The current tenant's own payment history, newest due date first. Tenant-only."
     getRentPaymentHistory(limit: Int = 20, offset: Int = 0): RentPaymentPage!

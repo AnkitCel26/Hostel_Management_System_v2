@@ -897,31 +897,432 @@ Major loading/error/empty states are handled.
 
 ## Phase 11 — Testing, Hardening and Delivery
 
-Implementation:
+### Objective
 
-Run type checks and builds.
+Perform a complete end-to-end verification of the Hostel Management System before delivery.
 
-Run linting.
+The system must be tested feature-by-feature for both Admin and Tenant users. Do not consider the phase complete only because the application builds, starts, or passes basic type checks.
 
-Verify GraphQL operations.
+Testing must verify the complete flow:
 
-Verify role protection.
+UI → GraphQL/API → Business Logic → Database → Response → UI
 
-Verify database migrations.
+---
 
-Test critical tenant-room transaction scenarios.
+### 11.1 Build and Static Validation
 
-Review environment configuration and production build.
+#### Backend
 
-Acceptance Criteria:
+* Run TypeScript type-checking.
+* Run backend build.
+* Run backend linting.
+* Verify there are no compilation errors.
+* Verify there are no unresolved imports.
+* Verify all required environment variables are configured.
+* Verify database connection starts successfully.
 
-Frontend production build succeeds.
+#### Frontend
 
-Backend starts successfully.
+* Run frontend type-checking.
+* Run frontend build.
+* Run frontend linting.
+* Verify there are no compilation errors.
+* Verify there are no unresolved imports.
+* Verify production build succeeds.
 
-Lint/type checks pass.
+---
 
-Critical user flows work end-to-end.
+### 11.2 Database and Migration Validation
+
+* Verify database connection.
+* Verify all migrations execute successfully.
+* Verify migration rollback where applicable.
+* Verify all required tables are created.
+* Verify primary keys and foreign keys.
+* Verify unique constraints.
+* Verify nullable/non-nullable fields.
+* Verify cascade/restrict relationships.
+* Verify indexes where defined.
+* Verify seed/default data where applicable.
+* Verify no migration creates duplicate or inconsistent schema.
+* Verify application can start successfully against the migrated database.
+
+---
+
+### 11.3 Authentication and Authorization Testing
+
+Test authentication for both Admin and Tenant.
+
+#### Admin
+
+* Admin login succeeds with valid credentials.
+* Admin login fails with invalid credentials.
+* Authentication state is maintained correctly.
+* Logout works.
+* Protected Admin routes cannot be accessed without authentication.
+* Tenant cannot access Admin-only routes.
+* Admin-only GraphQL operations reject unauthorized users.
+
+#### Tenant
+
+* Tenant login succeeds with valid credentials.
+* Tenant login fails with invalid credentials.
+* Authentication state is maintained correctly.
+* Logout works.
+* Protected Tenant routes cannot be accessed without authentication.
+* Tenant cannot access Admin-only routes.
+* Tenant cannot perform Admin-only GraphQL operations.
+
+#### Security
+
+* Verify unauthorized requests return the correct error.
+* Verify expired/invalid tokens are rejected.
+* Verify role checks are enforced on the backend, not only in the frontend.
+* Verify users cannot access another user's protected data by changing IDs or request parameters.
+
+---
+
+### 11.4 Admin Feature-by-Feature Testing
+
+Test every Admin feature defined in the MRD.
+
+For each feature, verify:
+
+1. Page loads successfully.
+2. Data loads correctly.
+3. Create operation works.
+4. Read/list operation works.
+5. Update operation works.
+6. Delete operation works where applicable.
+7. Search works.
+8. Filtering works where applicable.
+9. Sorting works where applicable.
+10. Pagination works.
+11. Form validation works.
+12. Required fields are enforced.
+13. Invalid data is rejected.
+14. Success messages are displayed correctly.
+15. Error messages are displayed correctly.
+16. Loading states work correctly.
+17. Empty states work correctly.
+18. Confirmation dialogs work where applicable.
+19. Refreshing the page does not corrupt application state.
+20. Database data matches the UI after each operation.
+
+#### Admin modules to verify
+
+* Admin Authentication
+* Admin Dashboard
+* User Management
+* PG/Hostel Management
+* Room Management
+* Tenant Management
+* Tenant/Room Assignment
+* Payment/Rent Management
+* Complaint Management
+* Announcement Management
+* Document Management
+* Reporting/Analytics
+* Any additional Admin features defined in the MRD
+
+Do not mark an Admin module as passed merely because its page opens. Verify the complete functionality of every available operation.
+
+---
+
+### 11.5 Tenant Feature-by-Feature Testing
+
+Test every Tenant feature defined in the MRD.
+
+For each feature, verify:
+
+1. Page loads successfully.
+2. Correct tenant-specific data is displayed.
+3. Create operation works where applicable.
+4. Read/list operation works.
+5. Update operation works where applicable.
+6. Delete/cancel operation works where applicable.
+7. Search/filter functionality works where applicable.
+8. Form validation works.
+9. Required fields are enforced.
+10. Invalid data is rejected.
+11. Success messages are displayed correctly.
+12. Error messages are displayed correctly.
+13. Loading states work correctly.
+14. Empty states work correctly.
+15. Tenant can access only their own permitted data.
+16. Tenant cannot access another tenant's data.
+17. Database changes are reflected correctly in the UI.
+18. Refreshing the page preserves correct application state.
+
+#### Tenant modules to verify
+
+* Tenant Authentication
+* Tenant Dashboard
+* Profile Management
+* PG/Hostel Information
+* Room Information
+* Room/Tenant Assignment information
+* Rent/Payment Management
+* Payment History
+* Complaints
+* Announcements
+* Documents
+* Any additional Tenant features defined in the MRD
+
+Do not mark a Tenant module as passed merely because its page opens. Verify the complete functionality of every available operation.
+
+---
+
+### 11.6 Role and Data Isolation Testing
+
+Verify that Admin and Tenant permissions are correctly isolated.
+
+Test scenarios such as:
+
+* Admin accessing Admin features.
+* Admin accessing permitted Tenant-related data.
+* Tenant accessing Tenant features.
+* Tenant attempting to access Admin features.
+* Tenant attempting to access another Tenant's data.
+* Unauthenticated user attempting to access protected pages.
+* Direct URL access to protected pages.
+* Direct GraphQL/API requests bypassing the frontend.
+* Manipulating IDs in requests to access another user's records.
+
+Expected result:
+
+Authorization must be enforced at the backend/API level and must not depend only on frontend route protection.
+
+---
+
+### 11.7 CRUD and Data Integrity Testing
+
+For every entity/module that supports CRUD operations:
+
+#### Create
+
+* Valid data creates successfully.
+* Invalid data is rejected.
+* Required fields are validated.
+* Duplicate data is handled correctly.
+
+#### Read
+
+* Correct records are returned.
+* Related records are returned correctly.
+* Users receive only authorized records.
+
+#### Update
+
+* Valid updates succeed.
+* Invalid updates are rejected.
+* Relationships remain consistent after updates.
+
+#### Delete
+
+* Valid deletion succeeds where permitted.
+* Unauthorized deletion is rejected.
+* Cascade/restrict behavior works as designed.
+* Deleted records are no longer incorrectly displayed.
+
+---
+
+### 11.8 Critical Business Flow Testing
+
+Test complete real-world workflows instead of testing individual pages only.
+
+#### Admin flows
+
+* Admin login → Dashboard → Manage PG → Manage Rooms → Manage Tenants.
+* Admin creates tenant → assigns room → verifies tenant data.
+* Admin records/updates payment → verifies payment history.
+* Admin creates announcement → verifies tenant visibility.
+* Admin receives/manages complaint → updates status → verifies tenant view.
+* Admin manages tenant documents → verifies correct tenant association.
+
+#### Tenant flows
+
+* Tenant login → Dashboard → Profile.
+* Tenant views PG/room information.
+* Tenant views payment information/history.
+* Tenant submits complaint → Admin manages complaint → Tenant sees updated status.
+* Tenant views announcements.
+* Tenant views/downloads permitted documents.
+
+Every critical flow must be tested from the beginning to the final expected result.
+
+---
+
+### 11.9 Tenant–Room Transaction Testing
+
+Test all critical tenant-room scenarios.
+
+* Assign tenant to an available room.
+* Prevent assignment to an unavailable/full room.
+* Move tenant from one room to another.
+* Verify previous room occupancy is updated.
+* Verify new room occupancy is updated.
+* Prevent invalid room assignment.
+* Verify tenant-room relationship remains consistent after update.
+* Test concurrent/transaction-sensitive room assignment scenarios.
+* Verify rollback when part of the transaction fails.
+* Verify database state after successful and failed transactions.
+
+---
+
+### 11.10 GraphQL/API Testing
+
+Verify every implemented GraphQL operation.
+
+For each Query:
+
+* Valid request succeeds.
+* Unauthorized request fails.
+* Invalid parameters fail correctly.
+* Correct data is returned.
+* Pagination/filtering/sorting works where applicable.
+
+For each Mutation:
+
+* Valid mutation succeeds.
+* Invalid input is rejected.
+* Authorization is enforced.
+* Database changes are correct.
+* Returned data matches the database state.
+
+Also verify:
+
+* GraphQL schema is valid.
+* Resolver errors are handled correctly.
+* Validation errors are meaningful.
+* No sensitive information is exposed in errors.
+* No unauthorized data is returned.
+
+---
+
+### 11.11 UI/UX Validation
+
+For every Admin and Tenant page verify:
+
+* Page loads without console errors.
+* Navigation works.
+* Buttons perform the correct action.
+* Forms work correctly.
+* Validation messages are visible and understandable.
+* Loading indicators appear when required.
+* Empty states are handled.
+* Error states are handled.
+* Success feedback is displayed.
+* Tables render correctly.
+* Pagination works.
+* Dialogs/modals work.
+* Back/forward navigation behaves correctly.
+* Responsive layout works for supported screen sizes.
+* No broken links/routes exist.
+
+---
+
+### 11.12 Error and Edge-Case Testing
+
+Test:
+
+* Empty database.
+* No tenants.
+* No rooms.
+* No payments.
+* No complaints.
+* Invalid IDs.
+* Duplicate records.
+* Missing required fields.
+* Invalid formats.
+* Unauthorized requests.
+* Expired authentication.
+* Network/API failure.
+* Database failure.
+* Failed transactions.
+* Large datasets where applicable.
+* Boundary values.
+* Refreshing pages during authenticated sessions.
+
+The application must fail gracefully without corrupting data.
+
+---
+
+### 11.13 Regression Testing
+
+After fixing any defect:
+
+1. Reproduce the original issue.
+2. Apply the fix.
+3. Verify the issue is resolved.
+4. Re-run the affected feature.
+5. Re-run related features.
+6. Re-run critical Admin flows.
+7. Re-run critical Tenant flows.
+8. Run the complete type-check/build/test suite.
+
+Do not introduce a fix that breaks another module.
+
+---
+
+### 11.14 Production Readiness
+
+Before delivery verify:
+
+* Backend starts successfully.
+* Frontend production build succeeds.
+* All required environment variables are documented.
+* No secrets/API keys are committed.
+* No development-only configuration is accidentally used in production.
+* Database migrations are production-safe.
+* CORS configuration is correct.
+* Authentication configuration is correct.
+* Error handling is production-safe.
+* Logging does not expose sensitive information.
+* No debug/test code remains.
+* No unnecessary console logs remain.
+* No TODOs/blockers remain in critical functionality.
+* No broken routes or GraphQL operations remain.
+
+---
+
+### 11.15 Final Acceptance Checklist
+
+The phase is complete only when all of the following are true:
+
+* [ ] Backend type-check passes.
+* [ ] Backend build passes.
+* [ ] Backend lint passes.
+* [ ] Frontend type-check passes.
+* [ ] Frontend build passes.
+* [ ] Frontend lint passes.
+* [ ] Database migrations pass.
+* [ ] Authentication works.
+* [ ] Authorization works.
+* [ ] Admin authentication tested.
+* [ ] Tenant authentication tested.
+* [ ] Every Admin feature tested.
+* [ ] Every Tenant feature tested.
+* [ ] Every implemented CRUD operation tested.
+* [ ] Every implemented GraphQL Query tested.
+* [ ] Every implemented GraphQL Mutation tested.
+* [ ] Role isolation tested.
+* [ ] Tenant data isolation tested.
+* [ ] Tenant-room transactions tested.
+* [ ] Critical Admin end-to-end flows tested.
+* [ ] Critical Tenant end-to-end flows tested.
+* [ ] Error and edge cases tested.
+* [ ] Regression testing completed.
+* [ ] Production configuration reviewed.
+* [ ] No critical defects remain.
+* [ ] Application is ready for delivery.
+
+### Final Rule
+
+Do not mark Phase 11 as complete based only on automated build/type-check/lint results.
+
+A feature is considered verified only when its UI, API/GraphQL operation, business logic, database behavior, authorization, validation, error handling, and end-to-end user flow have been tested where applicable.
+
 
 # 14. OpenCode Development Guidelines
 

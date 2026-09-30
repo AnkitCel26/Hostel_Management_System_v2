@@ -69,6 +69,19 @@ function notFound(message: string): GraphQLError {
   });
 }
 
+/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Guards the id inputs: a malformed id can never match a row, so it is
+ * reported with the same BAD_USER_INPUT / NOT_FOUND answer as a
+ * well-formed id that does not exist. Without this guard the uuid column
+ * error would surface as an internal server error.
+ */
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 /** PostgreSQL unique-constraint violation (23505). */
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -114,6 +127,9 @@ async function findPgOrThrow(pgId: string | null | undefined): Promise<Pg> {
   const trimmed = typeof pgId === 'string' ? pgId.trim() : '';
   if (trimmed.length === 0) {
     throw badRequest('A PG id is required');
+  }
+  if (!isUuid(trimmed)) {
+    throw badRequest('The selected PG does not exist');
   }
   const pg = await pgRepo().findOne({ where: { id: trimmed } });
   if (!pg) {
@@ -172,6 +188,9 @@ export async function createRoom(input: CreateRoomInput): Promise<Room> {
  * PG), so pgId is intentionally not accepted here.
  */
 export async function updateRoom(id: string, input: UpdateRoomInput): Promise<Room> {
+  if (!isUuid(id)) {
+    throw notFound('Room not found');
+  }
   const room = await roomRepo().findOne({ where: { id }, relations: { pg: true } });
   if (!room) {
     throw notFound('Room not found');

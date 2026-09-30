@@ -32,6 +32,27 @@ export function formatDateOnly(dateOnly: string | null | undefined): string {
   return formatDate(`${dateOnly}T00:00:00`);
 }
 
+/**
+ * Current calendar month as `YYYY-MM` in the viewer's local timezone. Used as
+ * the default billing-month scope on the admin payments page.
+ */
+export function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Formats a `YYYY-MM` month as a readable label ("September 2026"). Returns
+ * the input unchanged when it is not a valid month.
+ */
+export function formatMonth(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return month;
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  if (Number.isNaN(parsed.getTime())) return month;
+  return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+}
+
 /** Up to two uppercase initials derived from a person's name (for avatars). */
 export function getInitials(name: string): string {
   const initials = name

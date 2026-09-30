@@ -31,6 +31,59 @@ Load the local demo data (3 properties, 8 tenants, 12 payments, 8 complaints,
 
 Create/promote an admin: `npm run seed:admin -- <email> <password> [name]`
 
+## Supabase document storage (Phase 9)
+
+Tenant documents are stored in Supabase storage; the database keeps only the
+metadata and the public URL. The bucket has to exist before the tenant
+document page works.
+
+1. Create the bucket — run `supabase/storage-setup.sql` once in Supabase →
+   SQL Editor, or create it by hand in Storage → Buckets with these settings:
+
+   | Setting             | Value                                                  |
+   | ------------------- | ------------------------------------------------------ |
+   | Name                | `tenant-documents`                                     |
+   | Public bucket       | **ON** (URLs are persisted permanently)                |
+   | File size limit     | `5242880` (5 MB)                                       |
+   | Allowed MIME types  | `image/png, image/jpeg, image/webp, application/pdf`   |
+
+2. Fill in both environment files, then restart both dev processes:
+
+   ```
+   cp backend/.env.example backend/.env      # if not already present
+   cp frontend/.env.example frontend/.env    # if not already present
+   ```
+
+   `frontend/.env` (Project Settings → API; use the **publishable** key, never
+   `service_role`):
+
+   ```
+   VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+   VITE_SUPABASE_ANON_KEY=<sb_publishable_… or eyJ… anon key>
+   VITE_SUPABASE_DOCS_BUCKET=tenant-documents
+   ```
+
+   `backend/.env` — public values only, used by `seed:demo` and
+   `verify:phase9` so stored document URLs point at the real bucket:
+
+   ```
+   SUPABASE_URL=https://<project-ref>.supabase.co
+   SUPABASE_DOCS_BUCKET=tenant-documents
+   ```
+
+   Vite reads `.env` only at startup, so `npm run dev` must be restarted after
+   editing it.
+
+Notes:
+
+- Tenant isolation is enforced by the backend, which scopes every document
+  operation to the caller's own tenant record. The Supabase client is
+  storage-only and never signs in, so `auth.uid()` is always null — do not add
+  an RLS policy keyed on it, it would reject every upload.
+- The bucket is public by design. Anyone holding a document URL can read that
+  file, so treat stored documents as sensitive and do not paste their URLs
+  into shared channels.
+
 ## Quick Start (root scripts)
 
     npm install          # installs root dev tools (concurrently)

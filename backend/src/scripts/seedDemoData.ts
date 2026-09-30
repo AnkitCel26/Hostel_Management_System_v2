@@ -44,6 +44,7 @@ import {
 } from '../graphql/services/complaint.service';
 import { createAnnouncement } from '../graphql/services/announcement.service';
 import { uploadTenantDocs } from '../graphql/services/document.service';
+import { buildDocumentUrl, warnStorageNotConfigured } from '../config/supabase';
 
 const ADMIN_EMAIL = 'admin@hostel.test';
 const ADMIN_PASSWORD = 'Admin@12345';
@@ -279,28 +280,37 @@ const ANNOUNCEMENTS: Array<{
   }
 ];
 
-const DOCUMENTS: Array<{
+/**
+ * Demo document records. docUrl is derived from SUPABASE_URL (backend/.env) at
+ * seed time rather than hardcoded: a placeholder host would persist a dead
+ * link that the tenant's "open document" action 404s on, and the docUrl
+ * validator only requires an absolute http(s) URL, so nothing downstream would
+ * catch it. Object paths are namespaced under `demo/` because the real browser
+ * upload namespaces by user id (`<userId>/…`) and only a signed-in tenant may
+ * write into their own folder.
+ */
+const DEMO_DOCUMENTS: Array<{
   tenantEmail: string;
   docName: string;
-  docUrl: string;
+  objectPath: string;
   docNumber: string | null;
 }> = [
   {
     tenantEmail: 'tenant1@hostel.test',
     docName: 'Aadhaar Card',
-    docUrl: 'https://demo-storage.example.com/tenants/priya-sharma-aadhaar.pdf',
+    objectPath: 'demo/priya-sharma-aadhaar.pdf',
     docNumber: 'XXXX-XXXX-0001'
   },
   {
     tenantEmail: 'tenant1@hostel.test',
     docName: 'Rent Agreement',
-    docUrl: 'https://demo-storage.example.com/tenants/priya-sharma-agreement.pdf',
+    objectPath: 'demo/priya-sharma-agreement.pdf',
     docNumber: 'RA-2026-06-001'
   },
   {
     tenantEmail: 'tenant2@hostel.test',
     docName: 'ID Proof',
-    docUrl: 'https://demo-storage.example.com/tenants/rahul-verma-id.pdf',
+    objectPath: 'demo/rahul-verma-id.pdf',
     docNumber: 'XXXX-XXXX-0002'
   }
 ];
@@ -509,12 +519,18 @@ async function ensureAnnouncements(admin: User): Promise<void> {
   }
 }
 
+/**
+ * Seeds the demo document records. The docUrl is derived from SUPABASE_URL, so
+ * this is skipped with a warning when storage is not configured rather than
+ * writing a URL that would 404 the moment a tenant opened the document. The
+ * rest of the demo dataset is unaffected.
+ */
 async function ensureDocuments(
   tenants: Map<string, { user: User; tenant: Tenant }>
 ): Promise<void> {
   const repo = AppDataSource.getRepository(TenantDocument);
-  const byEmail = new Map<string, typeof DOCUMENTS>();
-  for (const doc of DOCUMENTS) {
+  const byEmail = new Map<string, typeof DEMO_DOCUMENTS>();
+  for (const doc of DEMO_DOCUMENTS) {
     const list = byEmail.get(doc.tenantEmail) ?? [];
     list.push(doc);
     byEmail.set(doc.tenantEmail, list);
@@ -524,27 +540,42 @@ async function ensureDocuments(
     if (!entry) {
       throw new Error(`seed bug: no tenant ${email}`);
     }
-    const missing: typeof DOCUMENTS = [];
+    const missing: Array<{ docName: string; docUrl: string; docNumber: string | null }> = [];
     for (const doc of docs) {
       const existing = await repo.findOne({
         where: { tenant: { id: entry.tenant.id }, docName: doc.docName }
       });
-      if (existing) {
-        console.log(`document exists: ${doc.docName} (${email})`);
-      } else {
-        missing.push(doc);
+      const docUrl = buildDocumentUrl(doc.objectPath);
+      if (!docUrl) {
+        // No storage project: leave whatever is in the table untouched rather
+        // than writing another dead link.
+        warnStorageNotConfigured('seed:demo');
+        if (existing) {
+          console.log(`document exists: ${doc.docName} (${email})`);
+        } else {
+          console.log(`document skipped: ${doc.docName} (${email}) — no SUPABASE_URL`);
+        }
+        continue;
       }
+      if (existing) {
+        // A record seeded by an earlier run (or hand-edited) can point at a
+        // placeholder host, which 404s as soon as a tenant opens it. Re-assert
+        // the URL so re-seeding is what repairs it.
+        if (existing.docUrl !== docUrl) {
+          existing.docUrl = docUrl;
+          await repo.save(existing);
+          console.log(`document url repointed: ${doc.docName} (${email}) -> ${docUrl}`);
+        } else {
+          console.log(`document exists: ${doc.docName} (${email})`);
+        }
+        continue;
+      }
+      missing.push({ docName: doc.docName, docUrl, docNumber: doc.docNumber });
     }
     if (missing.length === 0) {
       continue;
     }
-    const created = await uploadTenantDocs(entry.user.id, {
-      docs: missing.map(({ docName, docUrl, docNumber }) => ({
-        docName,
-        docUrl,
-        docNumber
-      }))
-    });
+    const created = await uploadTenantDocs(entry.user.id, { docs: missing });
     for (const doc of created) {
       console.log(`document created: ${doc.docName} (${email})`);
     }

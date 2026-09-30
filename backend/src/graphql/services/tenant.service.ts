@@ -100,6 +100,19 @@ function notFound(message: string): GraphQLError {
   });
 }
 
+/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Guards the id inputs: a malformed id can never match a row, so it is
+ * reported with the same BAD_USER_INPUT / NOT_FOUND answer as a
+ * well-formed id that does not exist. Without this guard the uuid column
+ * error would surface as an internal server error.
+ */
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 /** PostgreSQL unique-constraint violation (23505). */
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -167,6 +180,9 @@ async function findLinkableUser(
   if (trimmed.length === 0) {
     throw badRequest('A user id is required');
   }
+  if (!isUuid(trimmed)) {
+    throw badRequest('The selected user does not exist');
+  }
   const user = await userRepo().findOne({ where: { id: trimmed } });
   if (!user) {
     throw badRequest('The selected user does not exist');
@@ -187,6 +203,9 @@ async function findPgOrThrow(manager: EntityManager, pgId: string | null | undef
   if (trimmed.length === 0) {
     throw badRequest('A PG id is required');
   }
+  if (!isUuid(trimmed)) {
+    throw badRequest('The selected PG does not exist');
+  }
   const pg = await manager.findOne(Pg, { where: { id: trimmed } });
   if (!pg) {
     throw badRequest('The selected PG does not exist');
@@ -202,6 +221,9 @@ async function findPgOrThrow(manager: EntityManager, pgId: string | null | undef
  * data for this operation.
  */
 async function lockTenant(manager: EntityManager, id: string): Promise<Tenant> {
+  if (!isUuid(id)) {
+    throw notFound('Tenant not found');
+  }
   const tenant = await manager
     .getRepository(Tenant)
     .createQueryBuilder('tenant')
@@ -223,6 +245,9 @@ async function lockTenant(manager: EntityManager, id: string): Promise<Tenant> {
  * occupancy read and the later write inside this transaction atomic.
  */
 async function lockRoomWithPg(manager: EntityManager, roomId: string): Promise<Room | null> {
+  if (!isUuid(roomId)) {
+    throw notFound('Room not found');
+  }
   return manager
     .getRepository(Room)
     .createQueryBuilder('room')
@@ -354,6 +379,9 @@ export async function updateTenant(id: string, input: UpdateTenantInput): Promis
       const rawPgId = typeof input.pgId === 'string' ? input.pgId.trim() : '';
       let pg = tenant.pg;
       if (rawPgId.length > 0 && rawPgId !== tenant.pg.id) {
+        if (!isUuid(rawPgId)) {
+          throw badRequest('The selected PG does not exist');
+        }
         const target = await manager.findOne(Pg, { where: { id: rawPgId } });
         if (!target) {
           throw badRequest('The selected PG does not exist');
@@ -487,6 +515,9 @@ export async function getAllTenants(args: TenantListArgs): Promise<TenantPage> {
 
   const pgId = typeof args.pgId === 'string' ? args.pgId.trim() : '';
   if (pgId.length > 0) {
+    if (!isUuid(pgId)) {
+      throw badRequest('The selected PG does not exist');
+    }
     const pg = await pgRepo().findOne({ where: { id: pgId } });
     if (!pg) {
       throw badRequest('The selected PG does not exist');

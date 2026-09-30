@@ -54,7 +54,7 @@ import type {
   RentSummary,
   TenantPage
 } from '../../types';
-import { formatCurrency, formatDateOnly } from '../../utils/format';
+import { currentMonth, formatCurrency, formatDateOnly, formatMonth } from '../../utils/format';
 import { PROPERTY_TERM } from '../../utils/labels';
 
 interface GetAllPaymentsData {
@@ -94,6 +94,26 @@ const actionIconSx = {
   bgcolor: 'background.paper'
 } as const;
 
+/** How many months back the month picker offers, including the current one. */
+const MONTH_OPTIONS_COUNT = 18;
+
+interface MonthOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * The billing months offered in the month picker: the current month first, then
+ * the previous MONTH_OPTIONS_COUNT - 1 months, newest to oldest. Rent is billed
+ * in advance, so the picker only ever looks back from today.
+ */
+const MONTH_OPTIONS: MonthOption[] = Array.from({ length: MONTH_OPTIONS_COUNT }, (_, index) => {
+  const now = new Date();
+  const value = new Date(now.getFullYear(), now.getMonth() - index, 1);
+  const month = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+  return { value: month, label: formatMonth(month) };
+});
+
 export function AdminPaymentsPage() {
   const [searchParams] = useSearchParams();
   const { success } = useSnackbar();
@@ -102,6 +122,9 @@ export function AdminPaymentsPage() {
   const debouncedSearch = useDebouncedValue(searchInput, 400);
   const [pgFilter, setPgFilter] = React.useState(() => searchParams.get('pgId') ?? '');
   const [statusFilter, setStatusFilter] = React.useState('');
+  // Rent is billed per calendar month, so the page opens on the current month.
+  // '' means "all months" and stays a valid, explicit choice.
+  const [monthFilter, setMonthFilter] = React.useState(() => currentMonth());
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
@@ -113,9 +136,10 @@ export function AdminPaymentsPage() {
   // Filters returning to their default values restart pagination.
   React.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, pgFilter, statusFilter]);
+  }, [debouncedSearch, pgFilter, statusFilter, monthFilter]);
 
   const trimmedSearch = debouncedSearch.trim();
+  const monthVariable = monthFilter === '' ? undefined : monthFilter;
   const { data, previousData, loading, error, refetch } = useQuery<GetAllPaymentsData>(
     GET_ALL_PAYMENTS_QUERY,
     {
@@ -123,16 +147,17 @@ export function AdminPaymentsPage() {
         search: trimmedSearch === '' ? undefined : trimmedSearch,
         pgId: pgFilter === '' ? undefined : pgFilter,
         status: statusFilter === '' ? undefined : (statusFilter as PaymentStatus),
+        month: monthVariable,
         limit: rowsPerPage,
         offset: page * rowsPerPage
       },
       notifyOnNetworkStatusChange: true
     }
   );
-  // The summary follows the property filter so the cards always describe the
-  // same slice of data the table is showing.
+  // The summary follows the property and month filters so the cards always
+  // describe the same slice of data the table is showing.
   const summaryQuery = useQuery<GetRentSummaryData>(GET_ADMIN_RENT_SUMMARY_QUERY, {
-    variables: { pgId: pgFilter === '' ? undefined : pgFilter }
+    variables: { pgId: pgFilter === '' ? undefined : pgFilter, month: monthVariable }
   });
   const pgsQuery = useQuery<GetAllPgsData>(GET_ALL_PGS_QUERY);
   // Tenants for the form's picker (the list API is paginated; 100 covers the
@@ -149,7 +174,12 @@ export function AdminPaymentsPage() {
     summaryQuery.previousData?.getAdminRentSummary ?? null;
   const pgs = pgsQuery.data?.getAllPgs ?? [];
   const tenants = tenantsQuery.data?.getAllTenants.items ?? [];
-  const hasActiveFilters = trimmedSearch !== '' || pgFilter !== '' || statusFilter !== '';
+  // The month scope is part of the toolbar, so it counts as an active filter
+  // except in its default state (all months).
+  const hasActiveFilters =
+    trimmedSearch !== '' || pgFilter !== '' || statusFilter !== '' || monthFilter !== '';
+  /** "September 2026" for a month scope, "all months" otherwise. */
+  const monthScopeLabel = monthFilter === '' ? 'all months' : formatMonth(monthFilter);
 
   const openCreate = () => setDialog({ open: true, payment: null });
   const openEdit = (payment: RentPayment) => setDialog({ open: true, payment });
@@ -158,6 +188,9 @@ export function AdminPaymentsPage() {
   const handleSaved = (message: string): void => {
     closeDialog();
     success(message);
+    // Apollo refetches with the current variables, so a payment saved outside
+    // the active month/property scope simply does not appear in the table —
+    // the same as any other filter combination.
     void refetch();
     void summaryQuery.refetch();
   };
@@ -166,6 +199,7 @@ export function AdminPaymentsPage() {
     setSearchInput('');
     setPgFilter('');
     setStatusFilter('');
+    setMonthFilter('');
   };
 
   return (
@@ -180,7 +214,7 @@ export function AdminPaymentsPage() {
         }
       />
 
-      {/* Summary cards describe the current filter scope (all properties or one). */}
+      {/* Summary cards describe the current filter scope (property + billing month). */}
       {summary ? (
         <Box
           sx={{
@@ -280,13 +314,29 @@ export function AdminPaymentsPage() {
             <MenuItem value="paid">Paid</MenuItem>
             <MenuItem value="overdue">Overdue</MenuItem>
           </TextField>
+          <TextField
+            select
+            label="Month"
+            size="small"
+            value={monthFilter}
+            onChange={(event) => setMonthFilter(event.target.value)}
+            sx={{ minWidth: { sm: 170 } }}
+            inputProps={{ 'aria-label': 'Filter payments by billing month' }}
+          >
+            <MenuItem value="">All months</MenuItem>
+            {MONTH_OPTIONS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
           {paymentPage ? (
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{ display: { xs: 'none', sm: 'block' }, whiteSpace: 'nowrap' }}
             >
-              {payments.length} of {total} payment{total === 1 ? '' : 's'}
+              {payments.length} of {total} payment{total === 1 ? '' : 's'} for {monthScopeLabel}
             </Typography>
           ) : null}
         </CardContent>
@@ -308,7 +358,7 @@ export function AdminPaymentsPage() {
             title={hasActiveFilters ? 'No payments match your filters' : 'No payments recorded yet'}
             message={
               hasActiveFilters
-                ? 'Try a different search term or clear the filters.'
+                ? 'Try a different search term, or clear the filters to see every month.'
                 : 'Record the first rent payment to start tracking collection.'
             }
             action={

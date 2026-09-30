@@ -36,7 +36,8 @@ const TENANT_EMAILS = [
   'phase6.cross@hostel.test'
 ];
 const ROOMLESS_EMAIL = 'phase6.roomless@hostel.test';
-const TEST_USER_EMAILS = [TEST_ADMIN_EMAIL, ...TENANT_EMAILS, ROOMLESS_EMAIL];
+const MONTH_EMAIL = 'phase6.month@hostel.test';
+const TEST_USER_EMAILS = [TEST_ADMIN_EMAIL, ...TENANT_EMAILS, ROOMLESS_EMAIL, MONTH_EMAIL];
 const NONEXISTENT_ID = '00000000-0000-0000-0000-000000000000';
 
 interface GqlResult {
@@ -132,8 +133,8 @@ const UPDATE_PAYMENT = `
   }`;
 
 const GET_PAYMENTS = `
-  query GetAllRentPayments($search: String, $pgId: ID, $tenantId: ID, $status: PaymentStatus, $limit: Int, $offset: Int) {
-    getAllRentPayments(search: $search, pgId: $pgId, tenantId: $tenantId, status: $status, limit: $limit, offset: $offset) {
+  query GetAllRentPayments($search: String, $pgId: ID, $tenantId: ID, $status: PaymentStatus, $month: String, $limit: Int, $offset: Int) {
+    getAllRentPayments(search: $search, pgId: $pgId, tenantId: $tenantId, status: $status, month: $month, limit: $limit, offset: $offset) {
       total limit offset
       items { id amount paidAmount dueDate paidDate status notes tenant { id name } }
     }
@@ -155,8 +156,8 @@ const GET_PAYMENTS_DEEP = `
   }`;
 
 const GET_SUMMARY = `
-  query GetAdminRentSummary($pgId: ID) {
-    getAdminRentSummary(pgId: $pgId) {
+  query GetAdminRentSummary($pgId: ID, $month: String) {
+    getAdminRentSummary(pgId: $pgId, month: $month) {
       totalPayments totalBilled totalCollected outstandingAmount
       pendingCount partialCount paidCount overdueCount
     }
@@ -1004,6 +1005,154 @@ async function main(): Promise<void> {
       }
     }
     console.log('PASS: every payment satisfies paidAmount <= amount and the paidDate rule');
+
+    // --- the billing-month filter (admin payments page) ---
+    // A payment belongs to the calendar month of its due date. These fixtures
+    // sit in fixed, distinct months (well clear of the running date, so the
+    // derived statuses below are stable) and live on their own tenant, so the
+    // counts above stay exact. Runs last because it adds payments after every
+    // other total was asserted.
+    const monthUser = await createTestUser('Month Scope Tenant', MONTH_EMAIL);
+    const monthTenant = await createTenantViaGql(
+      monthUser.id,
+      beta.id,
+      'Month Scope Tenant'
+    );
+    // Fixed, already-past months so the derived statuses below are stable no
+    // matter when the script runs. February has exactly 28 days, so its last
+    // day pins the inclusive upper bound of the month range.
+    const FEB_START = '2025-02-01';
+    const FEB_LAST = '2025-02-28';
+    const MAR_FIRST = '2025-03-01';
+    const DEC_LAST = '2025-12-31';
+    const JAN_NEXT_FIRST = '2026-01-01';
+    const febPaid = await createPayment({
+      tenantId: monthTenant.id,
+      amount: 4000,
+      paidAmount: 4000,
+      dueDate: FEB_START,
+      notes: 'month scope feb first'
+    });
+    check('a payment due on the first of a month is paid', febPaid.status, 'paid');
+    const febUnpaid = await createPayment({
+      tenantId: monthTenant.id,
+      amount: 6000,
+      dueDate: FEB_LAST,
+      notes: 'month scope feb last'
+    });
+    check('a payment due on the last of a month is overdue', febUnpaid.status, 'overdue');
+    await createPayment({
+      tenantId: monthTenant.id,
+      amount: 7000,
+      dueDate: MAR_FIRST,
+      notes: 'month scope march first'
+    });
+    // December/January together prove the range rolls over the year boundary.
+    await createPayment({
+      tenantId: monthTenant.id,
+      amount: 8000,
+      dueDate: DEC_LAST,
+      notes: 'month scope december last'
+    });
+    await createPayment({
+      tenantId: monthTenant.id,
+      amount: 9000,
+      dueDate: JAN_NEXT_FIRST,
+      notes: 'month scope january first'
+    });
+
+    const febFilter = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-02', tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('the month filter scopes to one billing month', febFilter.total, 2);
+    check(
+      'the month filter covers the first and last day of the month',
+      febFilter.items.map((item) => item.dueDate).sort().join(','),
+      `${FEB_START},${FEB_LAST}`
+    );
+    const marFilter = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-03', tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('a month never leaks into the next one', marFilter.total, 1);
+    const decFilter = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-12', tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('the last month includes its final day', decFilter.total, 1);
+    const janFilter = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2026-01', tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('the month range rolls over the year boundary', janFilter.total, 1);
+    const emptyMonth = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-11', tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('a month with no payments returns an empty page', emptyMonth.total, 0);
+    const allMonths = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { tenantId: monthTenant.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('an omitted month filter covers every month', allMonths.total, 5);
+    const febAndPaid = field<PaymentPageShape>(
+      await exec(
+        GET_PAYMENTS,
+        { month: '2025-02', tenantId: monthTenant.id, status: 'paid' },
+        asAdmin
+      ),
+      'getAllRentPayments'
+    );
+    check('the month filter combines with the status filter', febAndPaid.total, 1);
+    const febAndPg = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-02', pgId: beta.id }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('the month filter combines with the pgId filter', febAndPg.total, 2);
+    const febAndSearch = field<PaymentPageShape>(
+      await exec(GET_PAYMENTS, { month: '2025-02', search: 'feb last' }, asAdmin),
+      'getAllRentPayments'
+    );
+    check('the month filter combines with the search filter', febAndSearch.total, 1);
+
+    // The summary must scope by the identical range, so the cards on the admin
+    // payments page always describe the rows the table is showing.
+    const febSummary = field<SummaryShape>(
+      await exec(GET_SUMMARY, { month: '2025-02', pgId: beta.id }, asAdmin),
+      'getAdminRentSummary'
+    );
+    check('the month-scoped summary counts the same rows as the list', febSummary.totalPayments, 2);
+    check('the month-scoped summary sums billed', febSummary.totalBilled, 10000);
+    check('the month-scoped summary sums collected', febSummary.totalCollected, 4000);
+    check('the month-scoped summary computes outstanding', febSummary.outstandingAmount, 6000);
+    check('the month-scoped summary counts paid', febSummary.paidCount, 1);
+    check('the month-scoped summary counts overdue', febSummary.overdueCount, 1);
+    const janSummary = field<SummaryShape>(
+      await exec(GET_SUMMARY, { month: '2026-01', pgId: beta.id }, asAdmin),
+      'getAdminRentSummary'
+    );
+    check('the month-scoped summary rolls over the year boundary', janSummary.totalPayments, 1);
+    expectError(
+      'the summary rejects a malformed month',
+      await exec(GET_SUMMARY, { month: '2027' }, asAdmin),
+      'BAD_USER_INPUT'
+    );
+    expectError(
+      'the payment list rejects a malformed month',
+      await exec(GET_PAYMENTS, { month: '02-2027' }, asAdmin),
+      'BAD_USER_INPUT'
+    );
+    expectError(
+      'the payment list rejects an impossible month',
+      await exec(GET_PAYMENTS, { month: '2025-13' }, asAdmin),
+      'BAD_USER_INPUT'
+    );
+    expectError(
+      'the payment list rejects a non-numeric month',
+      await exec(GET_PAYMENTS, { month: 'february' }, asAdmin),
+      'BAD_USER_INPUT'
+    );
 
     console.log('\nAll Phase 6 rent and payment management checks passed.');
   } finally {

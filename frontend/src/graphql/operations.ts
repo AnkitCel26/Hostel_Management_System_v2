@@ -334,6 +334,7 @@ export const GET_ALL_PAYMENTS_QUERY = gql`
     $pgId: ID
     $tenantId: ID
     $status: PaymentStatus
+    $month: String
     $limit: Int
     $offset: Int
   ) {
@@ -342,6 +343,7 @@ export const GET_ALL_PAYMENTS_QUERY = gql`
       pgId: $pgId
       tenantId: $tenantId
       status: $status
+      month: $month
       limit: $limit
       offset: $offset
     ) {
@@ -356,8 +358,8 @@ export const GET_ALL_PAYMENTS_QUERY = gql`
 `;
 
 export const GET_ADMIN_RENT_SUMMARY_QUERY = gql`
-  query GetAdminRentSummary($pgId: ID) {
-    getAdminRentSummary(pgId: $pgId) {
+  query GetAdminRentSummary($pgId: ID, $month: String) {
+    getAdminRentSummary(pgId: $pgId, month: $month) {
       totalPayments
       totalBilled
       totalCollected

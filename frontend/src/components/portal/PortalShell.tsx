@@ -490,7 +490,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               </IconButton>
               <Typography
                 variant="h6"
-                component="h1"
+                component="p"
                 noWrap
                 sx={{ flexGrow: 1, fontSize: '1rem', fontWeight: 600 }}
               >

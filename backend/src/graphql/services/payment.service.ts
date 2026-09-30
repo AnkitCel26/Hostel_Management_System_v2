@@ -76,13 +76,15 @@ export interface RentPaymentListArgs {
   pgId?: string | null;
   tenantId?: string | null;
   status?: PaymentStatus | null;
+  month?: string | null;
   limit?: number | null;
   offset?: number | null;
 }
 
-/** Query args for the admin rent summary (optional PG scope). */
+/** Query args for the admin rent summary (optional PG and month scope). */
 export interface RentSummaryArgs {
   pgId?: string | null;
+  month?: string | null;
 }
 
 /** Query args for the tenant/admin history feeds (pagination only). */
@@ -140,6 +142,19 @@ function notFound(message: string): GraphQLError {
   return new GraphQLError(message, {
     extensions: { code: 'NOT_FOUND', http: { status: 404 } }
   });
+}
+
+/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Guards the id inputs: a malformed id can never match a row, so it is
+ * reported with the same BAD_USER_INPUT / NOT_FOUND answer as a
+ * well-formed id that does not exist. Without this guard the uuid column
+ * error would surface as an internal server error.
+ */
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
 }
 
 /** Ownership violation (a tenant may only pay their own rent payments). */
@@ -230,6 +245,42 @@ function validatePaidAmount(raw: number | null | undefined, amount: number): num
   return paidAmount;
 }
 
+/**
+ * Optional billing-month filter, as `YYYY-MM`. A payment belongs to the month
+ * of its due date — that is the month the rent is billed for — so the filter
+ * resolves to a half-open due-date range [first day, first day of next month)
+ * and both the list and the summary are scoped by the identical range.
+ * '' and null mean "every month".
+ */
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** A resolved half-open due-date range for one billing month. */
+interface MonthRange {
+  /** First day of the month, YYYY-MM-DD. */
+  start: string;
+  /** First day of the next month, YYYY-MM-DD (exclusive upper bound). */
+  endExclusive: string;
+}
+
+function validateMonthFilter(raw: string | null | undefined): MonthRange | null {
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (!MONTH_PATTERN.test(trimmed)) {
+    throw badRequest('Month must be in YYYY-MM format');
+  }
+  const [year, month] = trimmed.split('-').map(Number);
+  // Day 0 of the next month is the first day of this one (JS normalises the
+  // overflow), so this handles December rolling into the next year for free.
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const endExclusive = new Date(Date.UTC(year, month, 1));
+  return {
+    start: start.toISOString().slice(0, 10),
+    endExclusive: endExclusive.toISOString().slice(0, 10)
+  };
+}
+
 const STATUS_VALUES = new Set<string>(Object.values(PaymentStatus));
 
 /** Backstop for non-GraphQL callers: the status filter must be a real enum value. */
@@ -299,6 +350,9 @@ async function findTenantOrThrow(tenantId: string | null | undefined): Promise<T
   if (trimmed.length === 0) {
     throw badRequest('A tenant id is required');
   }
+  if (!isUuid(trimmed)) {
+    throw badRequest('The selected tenant does not exist');
+  }
   const tenant = await tenantRepo().findOne({ where: { id: trimmed } });
   if (!tenant) {
     throw badRequest('The selected tenant does not exist');
@@ -314,6 +368,9 @@ async function findTenantOrThrow(tenantId: string | null | undefined): Promise<T
  * reference data for this operation.
  */
 async function lockPayment(manager: EntityManager, id: string): Promise<RentPayment> {
+  if (!isUuid(id)) {
+    throw notFound('Payment not found');
+  }
   const payment = await manager
     .getRepository(RentPayment)
     .createQueryBuilder('payment')
@@ -479,8 +536,8 @@ export async function payRent(userId: string, input: PayRentInput): Promise<Rent
  * Searchable, paginated, filterable rent payment list (FR-21). Search matches
  * the tenant name, the linked user's email, the tenant's room number, and
  * the payment notes case-insensitively. Filters: one PG, one tenant, one live
- * status. Newest due dates first with a deterministic id tiebreak, mirroring
- * the room/tenant lists (MRD §16: consistent pagination).
+ * status, one billing month. Newest due dates first with a deterministic id
+ * tiebreak, mirroring the room/tenant lists (MRD §16: consistent pagination).
  */
 export async function getAllRentPayments(args: RentPaymentListArgs): Promise<RentPaymentPage> {
   const limit = args.limit ?? DEFAULT_PAGE_SIZE;
@@ -492,6 +549,7 @@ export async function getAllRentPayments(args: RentPaymentListArgs): Promise<Ren
     throw badRequest('offset must be a whole number of 0 or greater');
   }
   const status = validateStatusFilter(args.status);
+  const monthRange = validateMonthFilter(args.month);
 
   const queryBuilder = paymentRepo()
     .createQueryBuilder('payment')
@@ -505,6 +563,9 @@ export async function getAllRentPayments(args: RentPaymentListArgs): Promise<Ren
 
   const pgId = typeof args.pgId === 'string' ? args.pgId.trim() : '';
   if (pgId.length > 0) {
+    if (!isUuid(pgId)) {
+      throw badRequest('The selected PG does not exist');
+    }
     const pg = await pgRepo().findOne({ where: { id: pgId } });
     if (!pg) {
       throw badRequest('The selected PG does not exist');
@@ -514,6 +575,9 @@ export async function getAllRentPayments(args: RentPaymentListArgs): Promise<Ren
 
   const tenantId = typeof args.tenantId === 'string' ? args.tenantId.trim() : '';
   if (tenantId.length > 0) {
+    if (!isUuid(tenantId)) {
+      throw badRequest('The selected tenant does not exist');
+    }
     const tenant = await tenantRepo().findOne({ where: { id: tenantId } });
     if (!tenant) {
       throw badRequest('The selected tenant does not exist');
@@ -525,6 +589,11 @@ export async function getAllRentPayments(args: RentPaymentListArgs): Promise<Ren
     // The live SQL mirror of resolvePaymentStatus — filtering by status must
     // agree with what the status field resolver displays.
     queryBuilder.andWhere(STATUS_PREDICATES[status]);
+  }
+
+  if (monthRange !== null) {
+    queryBuilder.andWhere('payment."dueDate" >= :monthStart', { monthStart: monthRange.start });
+    queryBuilder.andWhere('payment."dueDate" < :monthEnd', { monthEnd: monthRange.endExclusive });
   }
 
   const search = typeof args.search === 'string' ? args.search.trim() : '';
@@ -656,8 +725,9 @@ function rawNumber(value: string | number | null | undefined): number {
 
 /**
  * Aggregate payment statistics for the admin summary (FR-21), optionally
- * scoped to one PG. The status counts use the same live SQL predicates as
- * the payment list's status filter, so summary and list always agree.
+ * scoped to one PG and one billing month. The status counts use the same live
+ * SQL predicates as the payment list's status filter, and the month scope
+ * resolves to the same due-date range, so summary and list always agree.
  */
 export async function getAdminRentSummary(args: RentSummaryArgs): Promise<RentSummary> {
   const queryBuilder = paymentRepo()
@@ -672,6 +742,9 @@ export async function getAdminRentSummary(args: RentSummaryArgs): Promise<RentSu
 
   const pgId = typeof args.pgId === 'string' ? args.pgId.trim() : '';
   if (pgId.length > 0) {
+    if (!isUuid(pgId)) {
+      throw badRequest('The selected PG does not exist');
+    }
     const pg = await pgRepo().findOne({ where: { id: pgId } });
     if (!pg) {
       throw badRequest('The selected PG does not exist');
@@ -680,6 +753,14 @@ export async function getAdminRentSummary(args: RentSummaryArgs): Promise<RentSu
       .leftJoin('payment.tenant', 'tenant')
       .leftJoin('tenant.pg', 'pg')
       .andWhere('pg.id = :pgId', { pgId: pg.id });
+  }
+
+  // The month scope uses the same range as the list filter, so the summary
+  // cards always describe exactly the rows the table is showing.
+  const monthRange = validateMonthFilter(args.month);
+  if (monthRange !== null) {
+    queryBuilder.andWhere('payment."dueDate" >= :monthStart', { monthStart: monthRange.start });
+    queryBuilder.andWhere('payment."dueDate" < :monthEnd', { monthEnd: monthRange.endExclusive });
   }
 
   const raw = await queryBuilder.getRawOne<RentSummaryRaw>();

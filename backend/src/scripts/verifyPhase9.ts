@@ -17,6 +17,7 @@ import { GraphQLFormattedError } from 'graphql';
 import { In } from 'typeorm';
 
 import { AppDataSource } from '../config/db';
+import { getDocumentsPublicBase } from '../config/supabase';
 import { Pg } from '../entities/pg.entity';
 import { Room } from '../entities/room.entity';
 import { Tenant } from '../entities/tenant.entity';
@@ -39,7 +40,21 @@ const TENANT_EMAILS = [
 const ROOMLESS_EMAIL = 'phase9.roomless@hostel.test';
 const TEST_USER_EMAILS = [TEST_ADMIN_EMAIL, ...TENANT_EMAILS, ROOMLESS_EMAIL];
 const NONEXISTENT_ID = '00000000-0000-0000-0000-000000000000';
-const STORAGE_BASE = 'https://phase9.supabase.co/storage/v1/object/public/tenant-documents';
+
+/**
+ * Public base URL for the document bucket, read from SUPABASE_URL
+ * (backend/.env). Verification persists real docUrl values, so it must never
+ * invent a host — an unconfigured project fails fast here instead of writing
+ * dead URLs into the table.
+ */
+const STORAGE_BASE = getDocumentsPublicBase();
+if (!STORAGE_BASE) {
+  console.error(
+    'SUPABASE_URL is not configured. Set it in backend/.env (see .env.example) so the ' +
+      'verifier writes document URLs that point at the real storage bucket.'
+  );
+  process.exit(1);
+}
 
 interface GqlResult {
   data: Record<string, unknown> | null;

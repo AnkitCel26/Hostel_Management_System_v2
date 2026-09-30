@@ -18,6 +18,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import PhoneIcon from '@mui/icons-material/Phone';
 import StairsIcon from '@mui/icons-material/Stairs';
 
+import { DetailItem, DetailLabel } from '../../components/DetailItem';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { LoadingIndicator } from '../../components/LoadingIndicator';
@@ -47,12 +48,6 @@ const iconBadgeSx = {
     alpha(theme.palette.primary.main, 0.1)
 } as const;
 
-/** Muted uppercase label over a semibold value. */
-const detailLabelSx = {
-  letterSpacing: 1,
-  textTransform: 'uppercase'
-} as const;
-
 /** Same occupancy tone scale as the property cards (FR-11). */
 function occupancyTone(percent: number): 'primary' | 'warning' | 'error' {
   if (percent >= 100) return 'error';
@@ -65,31 +60,6 @@ function occupancyStatTone(percent: number): 'success' | 'warning' | 'error' {
   if (percent >= 100) return 'error';
   if (percent >= 75) return 'warning';
   return 'success';
-}
-
-interface DetailItemProps {
-  label: string;
-  value: string;
-}
-
-/** One fact: a muted uppercase label over a semibold value. */
-function DetailItem({ label, value }: DetailItemProps) {
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        fontWeight={600}
-        display="block"
-        sx={detailLabelSx}
-      >
-        {label}
-      </Typography>
-      <Typography variant="body2" fontWeight={600}>
-        {value}
-      </Typography>
-    </Box>
-  );
 }
 
 /** Friendly occupancy note derived from the room's live bed counts. */
@@ -366,15 +336,7 @@ export function TenantRoomPage() {
               <Stack direction="row" spacing={1.25} alignItems="flex-start">
                 <LocationOnIcon fontSize="small" color="action" sx={{ mt: 0.25 }} />
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    fontWeight={600}
-                    display="block"
-                    sx={detailLabelSx}
-                  >
-                    Address
-                  </Typography>
+                  <DetailLabel>Address</DetailLabel>
                   <Typography variant="body2" fontWeight={600}>
                     {pg.address}
                     {pg.city ? `, ${pg.city}` : ''}
@@ -385,15 +347,7 @@ export function TenantRoomPage() {
                 <Stack direction="row" spacing={1.25} alignItems="flex-start">
                   <PhoneIcon fontSize="small" color="action" sx={{ mt: 0.25 }} />
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      fontWeight={600}
-                      display="block"
-                      sx={detailLabelSx}
-                    >
-                      Contact
-                    </Typography>
+                    <DetailLabel>Contact</DetailLabel>
                     <Typography variant="body2" fontWeight={600}>
                       {pg.contactNumber}
                     </Typography>
@@ -402,15 +356,7 @@ export function TenantRoomPage() {
               ) : null}
               {pg.description ? (
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    fontWeight={600}
-                    display="block"
-                    sx={detailLabelSx}
-                  >
-                    About this {PROPERTY_TERM.singularLower}
-                  </Typography>
+                  <DetailLabel>About this {PROPERTY_TERM.singularLower}</DetailLabel>
                   <Typography variant="body2" color="text.secondary">
                     {pg.description}
                   </Typography>

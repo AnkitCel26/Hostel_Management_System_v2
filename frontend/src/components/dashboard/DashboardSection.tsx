@@ -29,11 +29,14 @@ export function DashboardSection({
       <Box
         sx={{
           display: 'flex',
-          alignItems: 'flex-start',
+          // Centred, not top-aligned: the action button sits on the title's
+          // optical centre, which is what makes a row of panels look aligned.
+          alignItems: 'center',
           justifyContent: 'space-between',
           gap: 2,
           px: 2.5,
           py: 2,
+          minHeight: 64,
           borderBottom: 1,
           borderColor: 'divider'
         }}
@@ -43,7 +46,12 @@ export function DashboardSection({
             {title}
           </Typography>
           {subtitle ? (
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              display="block"
+              sx={{ mt: 0.25, fontSize: '0.8125rem', lineHeight: 1.45 }}
+            >
               {subtitle}
             </Typography>
           ) : null}
@@ -55,6 +63,7 @@ export function DashboardSection({
           p: disablePadding ? 0 : 2.5,
           '&:last-child': { pb: disablePadding ? 0 : 2.5 },
           flexGrow: 1,
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'column'
         }}

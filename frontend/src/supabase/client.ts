@@ -11,18 +11,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *
  * The bucket is expected to be PUBLIC so the stored URL stays valid for the
  * lifetime of the record (a signed URL expires and would break the persisted
- * link). Objects are namespaced by the authenticated user's id
- * (`<userId>/<uuid>-<file name>`) so a Supabase row-level-security policy can
- * restrict every tenant to their own folder:
+ * link). Objects are namespaced by the app's own user id
+ * (`<userId>/<uuid>-<file name>`) so one tenant never overwrites another's
+ * file, and every record's read/delete scope is decided by the backend, which
+ * forces the caller's tenant record server-side.
  *
- *   create policy "tenant owns folder" on storage.objects for insert
- *   using (bucket_id = 'tenant-documents'
- *          and (storage.foldername(name))[1] = auth.uid()::text);
+ * There is deliberately NO Supabase RLS policy keyed on auth.uid(): this client
+ * is storage-only (see persistSession: false below) and never signs in, so
+ * auth.uid() is always null and such a policy would reject every upload.
+ * Isolation therefore comes from the app's GraphQL layer, not from Supabase.
+ * See supabase/storage-setup.sql for the bucket definition.
  *
  * Configuration (frontend/.env, see .env.example):
  *   VITE_SUPABASE_URL        — project URL
- *   VITE_SUPABASE_ANON_KEY   — public anon key (safe to ship to the browser)
- *   VITE_SUPABASE_DOCS_BUCKET — storage bucket name
+ *   VITE_SUPABASE_ANON_KEY   — publishable anon key (safe to ship to the
+ *                              browser; never the service_role key)
+ *   VITE_SUPABASE_DOCS_BUCKET — storage bucket name, must be a PUBLIC bucket
  */
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
@@ -136,6 +140,27 @@ export function getDocumentFileError(file: File | null | undefined): string | nu
   return null;
 }
 
+/**
+ * Random unique prefix for an object name.
+ *
+ * `crypto.randomUUID` only exists in a secure context, so it is missing when
+ * the dev server is opened over a plain-HTTP LAN address (for example
+ * http://192.168.1.5:5173 from a phone) and would throw mid-upload. The
+ * fallback uses getRandomValues, which is available in every context the app
+ * can realistically run in.
+ */
+function randomId(): string {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  // RFC 4122 version 4 / variant 10xx bit layout.
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Safe, collision-free object name: strips odd characters, adds a UUID prefix. */
 function buildObjectName(fileName: string): string {
   const extension = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')) : '';
@@ -147,7 +172,7 @@ function buildObjectName(fileName: string): string {
       .replace(/^[-.]+|[-.]+$/g, '')
       .slice(0, 60) || 'document';
   const safeExtension = /^\.[a-zA-Z0-9]{1,10}$/.test(extension) ? extension.toLowerCase() : '';
-  return `${crypto.randomUUID()}-${safeBase}${safeExtension}`;
+  return `${randomId()}-${safeBase}${safeExtension}`;
 }
 
 /** Result of a successful storage upload. */

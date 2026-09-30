@@ -140,6 +140,13 @@ function complaintRepo() {
   return AppDataSource.getRepository(Complaint);
 }
 
+/** Postgres uuid columns reject anything that is not a uuid with a 22P02 error. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 /**
  * Resolves the optional PG scope to a real row. A dashboard scoped to a
  * property that no longer exists is a client error, not an empty dashboard.
@@ -148,6 +155,11 @@ async function resolveScope(pgId: string | null | undefined): Promise<Pg | null>
   const trimmed = typeof pgId === 'string' ? pgId.trim() : '';
   if (trimmed.length === 0) {
     return null;
+  }
+  // Postgres uuid columns reject anything that is not a uuid with a 22P02
+  // error, so a malformed id is reported like an id that does not exist.
+  if (!isUuid(trimmed)) {
+    throw badRequest('The selected PG does not exist');
   }
   const pg = await pgRepo().findOne({ where: { id: trimmed } });
   if (!pg) {
